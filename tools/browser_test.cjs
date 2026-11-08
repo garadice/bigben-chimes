@@ -157,6 +157,14 @@ async function offlineUpgrade(browser,base){
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
 }
+async function firstAutoGesture(browser,base){
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ await context.addInitScript(()=>{const play=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){const muted=this.muted,promise=play.call(this);return muted?promise.then(()=>new Promise(resolve=>setTimeout(resolve,250))):promise;};});
+ const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ await shift(page,13,15,10);await page.locator('#btn-quarter').tap();await waitPlays(page,4);
+ check(JSON.stringify(await files(page))===JSON.stringify(['n-gs4','n-fs4','n-e4','n-b3']),'first auto tap waits for slow real media priming');
+ await page.locator('#btn-stop').tap();await context.close();
+}
 async function fallbackAndFile(browser,base){
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  await context.addInitScript(()=>{const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('audio/mp4')?'':original.call(this,type);};});
@@ -189,6 +197,7 @@ async function main(){
   check(external.length===0,'zero external runtime requests',external);
   await context.close();
   await offlineUpgrade(browser,base);
+  await firstAutoGesture(browser,base);
   await fallbackAndFile(browser,base);
  }catch(error){
   errors.push({name:'runner failure',detail:String(error)});
