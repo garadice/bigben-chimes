@@ -40,6 +40,12 @@ attribution shown here and in the app footer.
 - **License:** Creative Commons Attribution 2.5
   (<https://creativecommons.org/licenses/by/2.5/>) — attribution given in this
   file, in `README.md`, and on-screen in the app footer.
+- **License note:** Wikimedia Commons' GFDL licensing update later added
+  CC BY-SA 3.0 + GFDL to this file's page (the infobox's suggested attribution
+  names CC BY-SA 3.0); the original CC BY 2.5 grant persists via that
+  migration — the file still carries the `CC-BY-2.5` category and remains
+  multi-licensed ("you may select the license of your choice"), so this
+  app's CC BY 2.5 use stands.
 
 ## Icons — `icons/icon-*.png`
 

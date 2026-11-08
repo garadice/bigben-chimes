@@ -6,7 +6,7 @@
  * deletes the old cache. That is the deploy cache-bust mechanism.
  * (Convention: coder branches ship the right starting name; main applies
  * the bump when merging/deploying, one bump per release.) */
-const CACHE = 'bigben-chimes-v1.0.0';
+const CACHE = 'bigben-chimes-v1.0.1';
 
 const ASSETS = [
   './',
@@ -89,8 +89,13 @@ function rangeFromCache(req) {
     const m = /bytes=(\d*)-(\d*)/.exec(range);
     if (!m) return hit;
     const total = Number(hit.headers.get('content-length'));
-    const start = m[1] ? Number(m[1]) : 0;
-    const end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+    let start = m[1] ? Number(m[1]) : 0;
+    let end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+    if (m[1] === '' && m[2] !== '') {
+      // suffix range 'bytes=-N' means the LAST N bytes (RFC 7233), not the first
+      start = Math.max(0, total - Number(m[2]));
+      end = total - 1;
+    }
     if (isNaN(total) || start > end) {
       return new Response(null, {
         status: 416,

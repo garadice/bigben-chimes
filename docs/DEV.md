@@ -18,7 +18,7 @@ audio/melody.m4a    full Westminster Quarters sequence, 17.67 s (PD, 1945)
 audio/melody.ogg    same cut, Vorbis fallback (canPlayType picks per browser)
 audio/bong.m4a      single hour strike + decay, 4.10 s (PD, 1945)
 audio/bong.ogg      same cut, Vorbis fallback
-photo/bigben.jpg    tower photo, 1600x3190 (CC BY 2.5, Diliff)
+photo/bigben.jpg    tower photo, 1600x3192 (CC BY 2.5, Diliff)
 tools/gen_icons.py  regenerates icons (build-time only, needs Pillow)
 tools/chime_test.js headless logic suite: node tools/chime_test.js
 LICENSES.md         every non-code asset: source URL + author + license
