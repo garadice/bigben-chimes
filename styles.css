@@ -1,15 +1,17 @@
-/* Big Ben Chimes — kid-first styles.
- * Palette taken from the tower itself: gilt gold, dial cream, ink, dusk navy.
- * Everything huge, portrait-first, readable over the photo. */
+/* Big Ben Chimes — kid-first styles, v1.1.
+ * Palette from the tower: gilt gold, dial cream, ink, dusk navy.
+ * v1.1: the photo is the layout — full tower visible (contain), controls are
+ * a compact column of translucent squares on the right edge. */
 
 :root {
   --gilt: #e3b341;        /* the clock stage's gold */
   --gilt-deep: #a87d1c;
   --dial: #f7ecd4;        /* opal glass of the clock face */
   --ink: #201809;         /* Roman-numeral black */
-  --sky: #101a3c;         /* dusk navy behind the controls */
+  --sky: #101a3c;         /* dusk navy */
   --good: #2e9e4f;
-  --stop: #b5443c;
+  --stop: #c0392b;
+  --sq: 60px;             /* kid-tappable square size */
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -25,161 +27,236 @@ html, body {
   touch-action: manipulation;
 }
 
-/* ---------- the tower photo ---------- */
+/* ---------- the tower photo: FULLY visible, no bars anywhere ----------
+ * object-fit: cover at phone aspect trims only sky/foliage off the photo's
+ * left+right edges (~8 % of photo width); the tower itself — spire to base —
+ * is fully in frame and nothing covers its middle (visual QA round 2:
+ * contain letterboxed with hard navy bands at top/bottom, worse). */
 .tower {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 30%; /* bias toward the clock stage on squat screens */
+  object-position: 50% 30%; /* bias toward the clock stage on tall screens */
   z-index: 0;
+  transform-origin: 50% 100%;  /* sway pivots at the ground */
 }
 
-.scrim {
+/* soft readability scrim — light, so the photo stays the hero */
+body::before {
+  content: "";
   position: fixed;
   inset: 0;
   z-index: 1;
+  pointer-events: none;
   background:
     linear-gradient(180deg,
-      rgba(9, 13, 32, 0.72) 0%,
-      rgba(9, 13, 32, 0.18) 26%,
-      rgba(9, 13, 32, 0.05) 46%,
-      rgba(9, 13, 32, 0.55) 68%,
-      rgba(9, 13, 32, 0.92) 100%);
-  pointer-events: none;
+      rgba(9, 13, 32, 0.30) 0%,
+      rgba(9, 13, 32, 0.0) 15%,
+      rgba(9, 13, 32, 0.0) 84%,
+      rgba(9, 13, 32, 0.42) 100%);
 }
 
-/* ---------- layout ---------- */
-main {
-  position: relative;
-  z-index: 2;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: max(16px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
-}
-
-/* ---------- the clock dial badge (signature element) ---------- */
+/* ---------- clock pill, small, top-left ---------- */
 .dial {
-  margin-top: 8px;
-  padding: 6px 30px;
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 3;
+  padding: 2px 16px;
   border-radius: 999px;
-  background: var(--dial);
-  border: 5px solid var(--gilt);
-  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.55), inset 0 0 0 2px var(--ink);
+  background: rgba(247, 236, 212, 0.92);
+  border: 3px solid var(--gilt);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 0 1.5px var(--ink);
 }
 
 #clock {
   font-family: Georgia, "Times New Roman", "Noto Serif", serif;
   font-weight: 700;
-  font-size: clamp(44px, 13vw, 72px);
-  line-height: 1.15;
+  font-size: clamp(26px, 7vw, 40px);
+  line-height: 1.25;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
 
-/* ---------- mega buttons ---------- */
-.controls {
-  margin-top: auto;
+/* ---------- the button column (right edge) ---------- */
+.pad {
+  position: fixed;
+  z-index: 4;
+  top: 50%;
+  right: max(10px, env(safe-area-inset-right));
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: 100%;
-  max-width: 430px;
+  gap: 10px;
 }
 
-.big {
+.sq {
+  position: relative;          /* anchors the toggle's state dot */
+  width: var(--sq);
+  height: var(--sq);
+  border-radius: 16px;
+  border: 2.5px solid rgba(227, 179, 65, 0.85);
+  background: rgba(16, 26, 60, 0.55);          /* tower shows through */
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  min-height: 92px;
-  padding: 10px 26px;
-  border: 4px solid var(--ink);
-  border-radius: 28px;
-  cursor: pointer;
+  justify-content: center;
   transition: transform 0.08s ease, filter 0.15s ease;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
 }
-
-.big:active { transform: scale(0.96); filter: brightness(1.08); }
-
-.big:focus-visible,
-#btn-mute:focus-visible,
-#volume:focus-visible {
-  outline: 4px solid var(--gilt);
+.sq:active { transform: scale(0.92); filter: brightness(1.25); }
+.sq:focus-visible, #btn-mute:focus-visible, #volume:focus-visible {
+  outline: 3px solid var(--gilt);
   outline-offset: 3px;
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .big, .big:active { transition: none; transform: none; }
+  .sq, .sq:active, .tower.sway { transition: none; transform: none; animation: none; }
 }
 
-.big .ico { font-size: 52px; line-height: 1; }
-.big .lbl {
-  font-size: clamp(26px, 7vw, 34px);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--ink);
+.sq .ico { font-size: calc(var(--sq) * 0.58); line-height: 1; }
+
+/* auto-quarter toggle: green ring + dot when ON */
+#btn-quarter.on { border-color: var(--good); background: rgba(46, 158, 79, 0.45); }
+#btn-quarter .dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 1.5px rgba(9, 13, 32, 0.6);
 }
+#btn-quarter.on .dot { background: #35e06a; }
 
-#btn-full { background: var(--gilt); }
-#btn-bongs { background: var(--dial); }
-
-#btn-quarter { background: var(--sky); color: var(--dial); }
-#btn-quarter .lbl { color: var(--dial); }
-#btn-quarter.on { background: var(--good); }
-#btn-quarter.on .lbl, #btn-quarter.on .state { color: #fff; }
-
-#btn-quarter .state {
-  margin-left: auto;
-  padding: 8px 18px;
-  border-radius: 999px;
-  background: var(--stop);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-#btn-quarter.on .state { background: #fff; color: var(--ink); }
-
-/* ---------- volume row ---------- */
-.volrow {
+/* STOP: the one loud, solid, unmistakable square */
+#btn-stop {
   margin-top: 6px;
+  background: var(--stop);
+  border-color: rgba(32, 24, 9, 0.8);
+}
+#btn-stop.pressed { animation: stoppulse 0.35s ease; }
+@keyframes stoppulse {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- bong counter (big, centre, teaches counting) ---------- */
+.count {
+  position: fixed;
+  z-index: 5;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: clamp(90px, 30vw, 180px);
+  color: rgba(247, 236, 212, 0.95);
+  text-shadow: 0 6px 30px rgba(9, 13, 32, 0.9), 0 0 4px rgba(9, 13, 32, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.count.show { opacity: 1; }
+
+/* ---------- tower sway on each bong ---------- */
+.tower.sway { animation: sway 0.9s ease-in-out; }
+@keyframes sway {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(0.7deg); }
+  55% { transform: rotate(-0.55deg); }
+  80% { transform: rotate(0.25deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ---------- volume, small, bottom-left ---------- */
+.volwrap {
+  position: fixed;
+  z-index: 3;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: max(10px, env(safe-area-inset-left));
   display: flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  max-width: 430px;
-  padding: 8px 6px;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(9, 13, 32, 0.45);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 
 #btn-mute {
-  font-size: 40px;
+  font-size: 24px;
   line-height: 1;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 6px;
+  padding: 4px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
 
 #volume {
-  flex: 1;
-  height: 44px;
+  width: 118px;
+  height: 30px;
   accent-color: var(--gilt);
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+#volume::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(247, 236, 212, 0.25);
+}
+#volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--dial);
+  border: 3px solid var(--gilt);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
-/* ---------- credit ---------- */
+/* ---------- credit (CC BY 2.5 attribution — must stay) ---------- */
 .credit {
-  margin-top: 10px;
-  font-size: 11px;
-  color: rgba(247, 236, 212, 0.75);
+  position: fixed;
+  z-index: 3;
+  bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9.5px;
+  line-height: 1.4;
+  color: rgba(247, 236, 212, 0.78);
   text-align: center;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  max-width: min(92vw, 430px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .credit a { color: inherit; }
+
+/* ---------- landscape: the column becomes a bottom row ---------- */
+@media (orientation: landscape) {
+  .pad {
+    top: auto;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    flex-direction: row;
+    column-gap: 10px;
+  }
+  .credit { bottom: auto; top: max(6px, env(safe-area-inset-top)); left: auto;
+            right: max(10px, env(safe-area-inset-right)); transform: none; }
+  .volwrap { bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px)); }
+}

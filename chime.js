@@ -1,17 +1,34 @@
 /* Big Ben Chimes — pure chime logic (no DOM, node-testable).
  *
- * Sound model (matches the shipped assets, see LICENSES.md):
- *   audio/melody.m4a — the full Westminster Quarters sequence (17.67 s),
- *                      real Big Ben broadcast, New Year 1945.
- *   audio/bong.m4a   — a single hour strike with its natural decay (4.10 s).
+ * Sound model v1.1 (see docs/DEV.md for the evidence behind every number):
+ *   audio/melody.m4a — recorded pre-strike chime (changes 4+5 of the hour
+ *                      change), 17.67 s, real Big Ben broadcast, New Year 1945.
+ *   audio/q45a.m4a   — same recorded phrases, trimmed to 12.20 s (the :45 base).
+ *   audio/n-*.m4a    — four single-bell slices (G#4, F#4, E4, B3) cut from the
+ *                      same recording; used to assemble the per-quarter phrases.
+ *   audio/bong.m4a   — one hour strike + natural decay, 3.43 s.
  *
- * Because freely-licensed recordings of the distinct short quarter phrases
- * (the 15/30/45 chimes) are not available, every quarter plays the full
- * recorded sequence; the hour adds the correct number of bongs.
- * Bong count = (hour % 12) || 12  →  midnight/noon strike 12 times.
+ * Westminster Quarters pattern (Wikipedia, "Westminster Quarters"):
+ *   five changes of the four quarter bells (G#4, F#4, E4, B3):
+ *     1: G#4 F#4 E4 B3   2: E4 G#4 F#4 B3   3: E4 F#4 G#4 E4
+ *     4: G#4 E4 F#4 B3   5: B3 F#4 G#4 E4
+ *   :15 = change 1 · :30 = changes 2+3 · :45 = changes 4+5+1 ·
+ *   :00 = changes 2+3+4+5, then N strikes of the Great Bell.
+ *   Quarters ending on the tonic E4: :30 and :00. Ending on the dominant
+ *   B3: :15 and :45. (Asserted in tools/chime_test.js.)
+ *
+ * Bong count = (hour % 12) || 12 → midnight/noon strike 12 times.
  */
 (function (global) {
   'use strict';
+
+  /* ---- evidence-derived constants (docs/DEV.md) ---- */
+  var BONG_GAP = 3.99;      // measured strike-to-strike spacing in the 1945 WAV
+  var STRIKE_PAUSE = 0.6;   // melody asset end -> first strike (kid-friendly)
+  var MELODY_DUR = 17.67;   // audio/melody.m4a
+  var Q45A_DUR = 12.20;     // audio/q45a.m4a
+  var NOTE_STEP = 1.5;      // crotchet spacing measured in the recording
+  var MINIM_STEP = 1.7;     // minim slot -> next phrase (measured)
 
   /** Real Westminster convention: 0:00 and 12:00 both strike 12 times. */
   function bongsForHour(hour) {
@@ -32,45 +49,89 @@
       'T' + p(d.getHours()) + ':' + p(markMinute);
   }
 
+  /* The four recorded single-bell slices (files in audio/). */
+  var GS4 = 'n-gs4', FS4 = 'n-fs4', E4 = 'n-e4', B3 = 'n-b3';
+
+  /* Change 1 (G#4 F#4 E4 B3) — the phrase the 1945 recording does not
+   * contain; assembled from the four bell slices at the recorded rhythm. */
+  function change1Events(t0) {
+    return [
+      { file: GS4, at: t0 },
+      { file: FS4, at: t0 + NOTE_STEP },
+      { file: E4, at: t0 + 2 * NOTE_STEP },
+      { file: B3, at: t0 + 3 * NOTE_STEP }
+    ];
+  }
+
+  /* Changes 2+3 (E4 G#4 F#4 B3 / E4 F#4 G#4 E4) — assembled the same way;
+   * this is also the opening of the full-hour change. */
+  function changes23Events(t0) {
+    return [
+      { file: E4, at: t0 },
+      { file: GS4, at: t0 + NOTE_STEP },
+      { file: FS4, at: t0 + 2 * NOTE_STEP },
+      { file: B3, at: t0 + 3 * NOTE_STEP },
+      { file: E4, at: t0 + 3 * NOTE_STEP + MINIM_STEP },
+      { file: FS4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + NOTE_STEP },
+      { file: GS4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + 2 * NOTE_STEP },
+      { file: E4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + 3 * NOTE_STEP }
+    ];
+  }
+
   /**
-   * Timeline for the FULL chime (quarter sequence + N hour bongs).
-   * Returns [{file:'melody'|'bong', at:seconds}, ...] in play order.
-   * opts.melodyDur default 17.67 (the shipped file), opts.gap default 2.0 s —
-   * the card-mandated realistic 1.5–2 s bong spacing.
+   * Timeline for quarter mark q (0=:00 … 3=:45) at wall-clock `hour`.
+   * Returns [{file, at, n?}] sorted by time; hour-strike events carry n
+   * (1-based bong count, drives the big counting display).
+   * opts.bongGap / opts.strikePause / opts.melodyDur / opts.q45aDur are
+   * overridable for tests; defaults are the measured constants above.
    */
-  function fullChimeEvents(hour, opts) {
+  function quarterEvents(q, hour, opts) {
     opts = opts || {};
-    var melodyDur = opts.melodyDur != null ? opts.melodyDur : 17.67;
-    var gap = opts.gap != null ? opts.gap : 2.0;
-    var events = [{ file: 'melody', at: 0 }];
-    var n = bongsForHour(hour);
-    for (var i = 0; i < n; i++) {
-      events.push({ file: 'bong', at: melodyDur + gap + i * gap });
+    var bongGap = opts.bongGap != null ? opts.bongGap : BONG_GAP;
+    var strikePause = opts.strikePause != null ? opts.strikePause : STRIKE_PAUSE;
+    var melodyDur = opts.melodyDur != null ? opts.melodyDur : MELODY_DUR;
+    var q45aDur = opts.q45aDur != null ? opts.q45aDur : Q45A_DUR;
+
+    var events;
+    if (q === 1) {
+      events = change1Events(0);
+    } else if (q === 2) {
+      events = changes23Events(0);
+    } else if (q === 3) {
+      // recorded changes 4+5 (q45a), then assembled change 1 — ends on the
+      // dominant B3 the way the real :45 chime does.
+      events = [{ file: 'q45a', at: 0 }].concat(change1Events(q45aDur));
+    } else {
+      // full hour: assembled changes 2+3, then the recorded changes 4+5
+      // (melody.m4a), then N strikes of the Great Bell.
+      events = changes23Events(0);
+      var melodyAt = 6 * NOTE_STEP + 2 * MINIM_STEP; // changes 2+3 end at
+      // 6*NOTE_STEP + MINIM_STEP = 10.7 s; leave one more minim slot of ring.
+      events.push({ file: 'melody', at: melodyAt });
+      var n = bongsForHour(hour);
+      var firstBong = melodyAt + melodyDur + strikePause;
+      for (var i = 0; i < n; i++) {
+        events.push({ file: 'bong', at: firstBong + i * bongGap, n: i + 1 });
+      }
     }
     return events;
   }
 
-  /** Timeline for bongs only (the "just the bongs" button). */
+  /** Timeline for bongs only (the BONGY button). */
   function bongsOnlyEvents(hour, opts) {
     opts = opts || {};
-    var gap = opts.gap != null ? opts.gap : 2.0;
+    var gap = opts.gap != null ? opts.gap : BONG_GAP;
     var events = [];
     var n = bongsForHour(hour);
     for (var i = 0; i < n; i++) {
-      events.push({ file: 'bong', at: i * gap });
+      events.push({ file: 'bong', at: i * gap, n: i + 1 });
     }
     return events;
-  }
-
-  /** Timeline for the quarter melody alone (used on :15/:30/:45). */
-  function melodyOnlyEvents() {
-    return [{ file: 'melody', at: 0 }];
   }
 
   /**
    * Quarter scheduler. Call tick() ~every second. When enabled and the clock
-   * enters a NEW quarter mark, fires play(date, quarterIndex) — quarter 0 gets
-   * the full chime, 1–3 the melody alone.
+   * enters a NEW quarter mark, fires play(date, quarterIndex).
    *
    * now() is injectable for tests. A mark later than graceMs (default 90 s,
    * covers Android freezing/throttling of background tabs) past its start is
@@ -117,12 +178,17 @@
   }
 
   var api = {
+    BONG_GAP: BONG_GAP,
+    STRIKE_PAUSE: STRIKE_PAUSE,
+    MELODY_DUR: MELODY_DUR,
+    Q45A_DUR: Q45A_DUR,
+    NOTE_STEP: NOTE_STEP,
+    MINIM_STEP: MINIM_STEP,
     bongsForHour: bongsForHour,
     quarterIndex: quarterIndex,
     quarterKey: quarterKey,
-    fullChimeEvents: fullChimeEvents,
+    quarterEvents: quarterEvents,
     bongsOnlyEvents: bongsOnlyEvents,
-    melodyOnlyEvents: melodyOnlyEvents,
     createQuarterScheduler: createQuarterScheduler
   };
 

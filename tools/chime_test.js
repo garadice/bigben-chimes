@@ -19,6 +19,21 @@ function eq(actual, expected, label) {
   }
 }
 
+function ok(cond, label) {
+  if (cond) {
+    passed++;
+    console.log(`  ok  ${label}`);
+  } else {
+    failed++;
+    console.error(`FAIL  ${label}`);
+  }
+}
+
+function near(actual, expected, eps, label) {
+  ok(Math.abs(actual - expected) <= (eps || 1e-6),
+     `${label} (${actual} ≈ ${expected})`);
+}
+
 function d(h, m, s, ms) {
   // fixed date so keys are deterministic
   return new Date(2026, 10, 8, h, m, s || 0, ms || 0);
@@ -46,25 +61,89 @@ eq(C.quarterKey(d(14, 15)), '2026-11-08T14:15', '14:15 keys to the 14:15 mark');
 eq(C.quarterKey(d(14, 59)), '2026-11-08T14:45', '14:59 keys to the 14:45 mark');
 eq(C.quarterKey(d(0, 1)), '2026-11-08T00:00', '00:01 keys to the 00:00 mark');
 
-console.log('== fullChimeEvents ==');
-const ev23 = C.fullChimeEvents(23, { melodyDur: 17.67, gap: 2.0 });
-eq(ev23.length, 12, 'hour 23 -> melody + 11 bongs');
-eq(ev23[0], { file: 'melody', at: 0 }, 'melody first at t=0');
-eq(ev23[1].at, 19.67, 'first bong lands after melody + gap (17.67+2.0)');
-eq(ev23[2].at - ev23[1].at, 2.0, 'bong spacing 2.0 s');
-eq(C.fullChimeEvents(0).length, 13, 'midnight -> melody + 12 bongs');
-eq(C.fullChimeEvents(12).length, 13, 'noon -> melody + 12 bongs');
-eq(C.fullChimeEvents(9).length, 10, '9:00 -> melody + 9 bongs');
+console.log('== measured constants ==');
+eq(C.BONG_GAP, 3.99, 'strike gap = 3.99 s (measured in the 1945 WAV)');
+eq(C.NOTE_STEP, 1.5, 'crotchet spacing 1.5 s (measured)');
+eq(C.MINIM_STEP, 1.7, 'minim slot 1.7 s (measured)');
+eq(C.MELODY_DUR, 17.67, 'melody asset 17.67 s');
+eq(C.Q45A_DUR, 12.2, 'q45a asset 12.20 s');
 
-console.log('== bongsOnlyEvents ==');
-const bo = C.bongsOnlyEvents(23, { gap: 2.0 });
+console.log('== quarterEvents(1) — :15, change 1 ==');
+const q1 = C.quarterEvents(1, 14);
+eq(q1.map(e => e.file), ['n-gs4', 'n-fs4', 'n-e4', 'n-b3'], ':15 = 4 note slices, change 1');
+eq(q1.map(e => e.at), [0, 1.5, 3, 4.5], ':15 rhythm 0 / 1.5 / 3.0 / 4.5');
+eq(q1[3].file, 'n-b3', ':15 ends on the dominant B3');
+
+console.log('== quarterEvents(2) — :30, changes 2+3 ==');
+const q2 = C.quarterEvents(2, 14);
+eq(q2.map(e => e.file),
+   ['n-e4', 'n-gs4', 'n-fs4', 'n-b3', 'n-e4', 'n-fs4', 'n-gs4', 'n-e4'],
+   ':30 = 8 note slices, changes 2+3');
+eq(q2.map(e => e.at), [0, 1.5, 3, 4.5, 6.2, 7.7, 9.2, 10.7],
+   ':30 rhythm (minim slot 1.7 s after the 4th note)');
+eq(q2[7].file, 'n-e4', ':30 ends on the tonic E4');
+
+console.log('== quarterEvents(3) — :45, changes 4+5+1 ==');
+const q3 = C.quarterEvents(3, 14);
+eq(q3.map(e => e.file), ['q45a', 'n-gs4', 'n-fs4', 'n-e4', 'n-b3'],
+   ':45 = recorded 4+5 chunk + assembled change 1 (12 notes)');
+eq(q3.map(e => e.at), [0, 12.2, 13.7, 15.2, 16.7],
+   ':45 change 1 starts right after the q45a chunk');
+eq(q3[4].file, 'n-b3', ':45 ends on the dominant B3');
+
+console.log('== quarterEvents(0) — :00 full hour ==');
+const q0_15 = C.quarterEvents(0, 15);
+eq(q0_15.filter(e => e.file === 'bong').length, 3, 'hour 15 -> 3 strikes');
+eq(q0_15.filter(e => e.file !== 'bong').map(e => e.file),
+   ['n-e4', 'n-gs4', 'n-fs4', 'n-b3', 'n-e4', 'n-fs4', 'n-gs4', 'n-e4', 'melody'],
+   ':00 = changes 2+3 assembled + recorded changes 4+5 (melody) = 16 notes');
+eq(q0_15.filter(e => e.file !== 'bong').map(e => e.at),
+   [0, 1.5, 3, 4.5, 6.2, 7.7, 9.2, 10.7, 12.4], ':00 melody lands at 12.4 s');
+const bongs15 = q0_15.filter(e => e.file === 'bong');
+eq(bongs15[0].at, 12.4 + 17.67 + 0.6, 'first strike after melody end + pause (30.67)');
+eq(bongs15.map(e => e.n), [1, 2, 3], 'strike events carry 1-based bong count');
+near(bongs15[1].at - bongs15[0].at, 3.99, 1e-9, 'strike spacing = measured 3.99 s');
+
+for (const [h, n] of [[0, 12], [12, 12], [9, 9], [23, 11], [1, 1]]) {
+  const ev = C.quarterEvents(0, h);
+  eq(ev.filter(e => e.file === 'bong').length, n, `hour ${h} -> ${n} strikes`);
+}
+
+console.log('== bongsOnlyEvents (BONGY) ==');
+const bo = C.bongsOnlyEvents(23);
 eq(bo.length, 11, 'hour 23 -> 11 bongs only');
-eq(bo[0].at, 0, 'first bong immediately');
-eq(bo[10].at, 20, 'last of 11 bongs at 20.0 s');
+eq(bo[0], { file: 'bong', at: 0, n: 1 }, 'first bong immediately, count 1');
+eq(bo[10].at, bo[0].at + 10 * C.BONG_GAP, 'last bong lands 10 × gap after the first');
+near(bo[10].at, 39.9, 1e-9, 'last of 11 bongs at 11 × 3.99 s');
 eq(C.bongsOnlyEvents(0).length, 12, 'midnight -> 12 bongs');
 
-console.log('== melodyOnlyEvents ==');
-eq(C.melodyOnlyEvents(), [{ file: 'melody', at: 0 }], 'single melody event');
+console.log('== timelines are sane ==');
+for (const q of [0, 1, 2, 3]) {
+  const ev = C.quarterEvents(q, 10);
+  let mono = true;
+  for (let i = 1; i < ev.length; i++) {
+    if (ev[i].at <= ev[i - 1].at) mono = false;
+  }
+  ok(mono, `quarter ${q}: event times strictly increasing`);
+}
+{
+  // canonical ending-pitch rule: :15/:45 dominant B3, :30/:00 tonic E4
+  const lastNote = q => {
+    const ev = C.quarterEvents(q, 10).filter(e => e.file !== 'bong');
+    return ev[ev.length - 1].file;
+  };
+  eq(lastNote(1), 'n-b3', ':15 ends B3 (dominant)');
+  eq(lastNote(2), 'n-e4', ':30 ends E4 (tonic)');
+  eq(lastNote(3), 'n-b3', ':45 ends B3 (dominant)');
+  eq(lastNote(0), 'melody', ':00 ends with the recorded tonic-E4 phrase');
+  // every event file maps to a shipped asset base
+  const known = new Set(['melody', 'q45a', 'bong', 'n-gs4', 'n-fs4', 'n-e4', 'n-b3']);
+  for (const q of [0, 1, 2, 3]) {
+    for (const e of C.quarterEvents(q, 10)) {
+      ok(known.has(e.file), `event file "${e.file}" is a shipped asset`);
+    }
+  }
+}
 
 console.log('== quarter scheduler ==');
 function makeHarness(start) {
@@ -84,7 +163,7 @@ function makeHarness(start) {
   h.sched.tick();
   eq(h.log, [], 'enable-quiet at 14:07 fires nothing (stale 14:00 mark)');
   h.set(14, 15, 0.5); h.sched.tick();
-  eq(h.log, [{ key: '2026-11-08T14:15', q: 1 }], '14:15:00.5 fires quarter 1 (melody)');
+  eq(h.log, [{ key: '2026-11-08T14:15', q: 1 }], '14:15:00.5 fires quarter 1');
   h.set(14, 15, 2); h.sched.tick();
   eq(h.log.length, 1, 'same mark does not double-fire');
   h.set(14, 30, 1); h.sched.tick();
@@ -101,6 +180,8 @@ function makeHarness(start) {
   h.sched.setEnabledQuiet(true);
   h.set(0, 0, 1); h.sched.tick();
   eq(h.log, [{ key: '2026-11-08T00:00', q: 0 }], 'midnight rollover fires hour mark q0');
+  const ev = C.quarterEvents(0, 0);
+  eq(ev.filter(e => e.file === 'bong').length, 12, 'midnight timeline has 12 strikes');
 }
 
 {

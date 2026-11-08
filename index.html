@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Big Ben Chimes</title>
-  <meta name="description" content="Skutočný Veľký Ben zvoní celé štvrťhodiny aj bongy. Pre Matka.">
+  <meta name="description" content="Skutočný Veľký Ben zvoní štvrťhodiny, pol chvíľu aj celé hodiny. Pre Matka.">
   <meta name="theme-color" content="#101a3c">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -13,36 +13,43 @@
 </head>
 <body>
   <img class="tower" src="photo/bigben.jpg" alt="Big Ben" draggable="false" aria-hidden="true">
-  <div class="scrim" aria-hidden="true"></div>
 
-  <main>
-    <div class="dial"><time id="clock">--:--</time></div>
+  <div class="dial"><time id="clock">--:--</time></div>
 
-    <div class="controls">
-      <button id="btn-full" class="big">
-        <span class="ico" aria-hidden="true">🔔</span>
-        <span class="lbl">ZVONY</span>
-      </button>
+  <div class="count" id="count" aria-hidden="true"></div>
 
-      <button id="btn-bongs" class="big">
-        <span class="ico" aria-hidden="true">🛎</span>
-        <span class="lbl">BONGY</span>
-      </button>
+  <!-- kid-tappable column on the right edge; emoji only, nothing to read -->
+  <nav class="pad" aria-label="Zvony">
+    <button id="btn-q1" class="sq" aria-label="Štvrť (15 minút)">
+      <span class="ico" aria-hidden="true">🕒</span>
+    </button>
+    <button id="btn-q2" class="sq" aria-label="Pol hodiny (30)">
+      <span class="ico" aria-hidden="true">🕕</span>
+    </button>
+    <button id="btn-q3" class="sq" aria-label="Tri štvrte (45)">
+      <span class="ico" aria-hidden="true">🕘</span>
+    </button>
+    <button id="btn-q4" class="sq" aria-label="Celá hodina (zvoní + bongy)">
+      <span class="ico" aria-hidden="true">🕛</span>
+    </button>
+    <button id="btn-bongs" class="sq" aria-label="Len bongy">
+      <span class="ico" aria-hidden="true">🛎️</span>
+    </button>
+    <button id="btn-quarter" class="sq toggle" aria-pressed="false" aria-label="Každú štvrť automaticky">
+      <span class="ico" aria-hidden="true">⏰</span>
+      <span class="dot" aria-hidden="true"></span>
+    </button>
+    <button id="btn-stop" class="sq stop" aria-label="Stop — hneď ticho">
+      <span class="ico" aria-hidden="true">✋</span>
+    </button>
+  </nav>
 
-      <button id="btn-quarter" class="big" aria-pressed="false">
-        <span class="ico" aria-hidden="true">⏰</span>
-        <span class="lbl">KAŽDÚ ŠTVRŤ</span>
-        <span class="state">VYP</span>
-      </button>
+  <div class="volwrap">
+    <button id="btn-mute" aria-label="Ticho">🔊</button>
+    <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Hlasitosť">
+  </div>
 
-      <div class="volrow">
-        <button id="btn-mute" aria-label="Ticho">🔊</button>
-        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Hlasitosť">
-      </div>
-    </div>
-
-    <p class="credit">📷 Diliff / Wikimedia Commons (CC BY 2.5) · zvony: Radio Oranje 1. 1. 1945 (public domain)</p>
-  </main>
+  <p class="credit">📷 Diliff / Wikimedia Commons (CC BY 2.5) · zvony: Radio Oranje 1. 1. 1945 (PD)</p>
 
   <script src="chime.js"></script>
   <script src="app.js"></script>

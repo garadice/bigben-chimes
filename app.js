@@ -1,18 +1,18 @@
 /* Big Ben Chimes — UI wiring: audio pool, gesture unlock, sequencer,
- * quarter scheduler, clock display, volume/mute. Pure logic lives in chime.js.
+ * quarter scheduler, clock display, volume/mute, bong counter, sway,
+ * vibration, STOP. Pure logic lives in chime.js (v1.1: per-quarter events).
  *
  * Test hooks (mirrors the london-boom __TEST__ pattern):
  *   window.__BBC__.playEvents / cancelAll / players / scheduler /
- *   setClockOffset / stats / playSpy
+ *   setClockOffset / playQuarter / stats / playSpy
  */
 (function () {
   'use strict';
 
-  var BONG_GAP = 2.0;        // card: realistic 1.5–2 s spacing (s)
-  var MELODY_DUR = 17.67;    // audio/melody.m4a duration (s)
-  var BONG_POOL_SIZE = 4;    // overlapping decays need more than one player
+  var C = window.Chimes;   // evidence-derived timing constants live there
 
-  var C = window.Chimes;
+  var NOTE_FILES = ['n-gs4', 'n-fs4', 'n-e4', 'n-b3'];
+  var BONG_POOL_SIZE = 4;    // overlapping decays need more than one player
 
   // ---------- audio pool ----------
   /** Pick the best playable encoding: AAC first, Vorbis fallback. */
@@ -24,17 +24,20 @@
   }
 
   function makePlayer(base) {
-    var el = new Audio(audioSrc(base));
+    var el = new Audio(audioSrc('audio/' + base));
     el.preload = 'auto';
     return el;
   }
 
   var players = {
-    melody: makePlayer('audio/melody'),
+    melody: makePlayer('melody'),
+    q45a: makePlayer('q45a'),
+    notes: {},
     bongs: []
   };
+  NOTE_FILES.forEach(function (f) { players.notes[f] = makePlayer(f); });
   for (var i = 0; i < BONG_POOL_SIZE; i++) {
-    players.bongs.push(makePlayer('audio/bong'));
+    players.bongs.push(makePlayer('bong'));
   }
   var bongCursor = 0;
   var playErrors = []; // capture play() rejections for tests/diagnostics
@@ -42,9 +45,12 @@
   var volume = 0.9;
   var muted = false;
   var unlocked = false;
+  var unlocking = false; // first double-tap used to run the muted sweep twice
 
   function applyVolume() {
     players.melody.volume = muted ? 0 : volume;
+    players.q45a.volume = muted ? 0 : volume;
+    NOTE_FILES.forEach(function (f) { players.notes[f].volume = muted ? 0 : volume; });
     players.bongs.forEach(function (p) { p.volume = muted ? 0 : volume; });
   }
 
@@ -53,8 +59,11 @@
    * every player muted so later unmuted play() calls are allowed.
    */
   function unlock() {
-    if (unlocked) return Promise.resolve();
-    var all = [players.melody].concat(players.bongs);
+    if (unlocked || unlocking) return Promise.resolve();
+    unlocking = true;
+    var all = [players.melody, players.q45a].concat(
+      NOTE_FILES.map(function (f) { return players.notes[f]; }),
+      players.bongs);
     return Promise.all(all.map(function (p) {
       p.muted = true;
       var pr = p.play();
@@ -67,16 +76,45 @@
       });
     })).then(function () {
       unlocked = true;
+      unlocking = false;
       applyVolume();
+    }, function () {
+      unlocking = false; // allow a retry on the next gesture
     });
   }
 
   // ---------- sequencer ----------
   var seqTimers = [];
   var seqGen = 0; // generation counter — bumping cancels all pending strikes
+  var countHideTimer = null;
+  var swayTimer = null;
+
+  // ---------- kid feedback: bong count, tower sway, vibration ----------
+  var $count = document.getElementById('count');
+  var $tower = document.querySelector('.tower');
+
+  function onBongFeedback(n) {
+    if (n != null) {
+      $count.textContent = String(n);
+      $count.classList.add('show');
+      if (countHideTimer) clearTimeout(countHideTimer);
+      countHideTimer = setTimeout(function () { $count.classList.remove('show'); }, 1400);
+      seqTimers.push(countHideTimer); // STOP clears it too
+    }
+    if ($tower && !$tower.classList.contains('sway')) {
+      $tower.classList.add('sway');
+      swayTimer = setTimeout(function () { $tower.classList.remove('sway'); }, 900);
+      seqTimers.push(swayTimer);
+    }
+    try {
+      if (navigator.vibrate) navigator.vibrate(140);
+    } catch (e) { /* no vibration support — fine */ }
+  }
 
   function stopAllPlayers() {
-    [players.melody].concat(players.bongs).forEach(function (p) {
+    var all = [players.melody, players.q45a].concat(
+      NOTE_FILES.map(function (f) { return players.notes[f]; }), players.bongs);
+    all.forEach(function (p) {
       try {
         p.pause();
         p.currentTime = 0;
@@ -84,14 +122,19 @@
     });
   }
 
-  function playOne(file) {
-    var el;
-    if (file === 'melody') {
-      el = players.melody;
-    } else {
-      el = players.bongs[bongCursor % players.bongs.length];
+  function playerFor(file) {
+    if (file === 'melody') return players.melody;
+    if (file === 'q45a') return players.q45a;
+    if (file === 'bong') {
+      var el = players.bongs[bongCursor % players.bongs.length];
       bongCursor++;
+      return el;
     }
+    return players.notes[file]; // n-gs4 / n-fs4 / n-e4 / n-b3
+  }
+
+  function playOne(file) {
+    var el = playerFor(file);
     try {
       el.currentTime = 0;
     } catch (e) { /* seek before metadata is harmless */ }
@@ -113,7 +156,7 @@
     return pr || Promise.resolve();
   }
 
-  /** Schedule an event timeline [{file, at}] (seconds). Returns generation id. */
+  /** Schedule an event timeline [{file, at, n?}] (seconds). Returns gen id. */
   function playEvents(events) {
     cancelAll();
     var gen = ++seqGen;
@@ -123,6 +166,7 @@
       seqTimers.push(setTimeout(function () {
         if (gen !== seqGen) return; // superseded by a newer tap
         playOne(ev.file);
+        if (ev.file === 'bong') onBongFeedback(ev.n);
       }, delayMs));
     });
     return gen;
@@ -132,28 +176,34 @@
     seqGen++;
     seqTimers.forEach(clearTimeout);
     seqTimers = [];
+    if (countHideTimer) { clearTimeout(countHideTimer); countHideTimer = null; }
+    if (swayTimer) { clearTimeout(swayTimer); swayTimer = null; }
+    $count.classList.remove('show');
+    if ($tower) $tower.classList.remove('sway');
     stopAllPlayers();
   }
 
   // ---------- quarter scheduler ----------
   var quarterOn = false;
+  var clockOffsetMs = 0; // tests only: shift the app's idea of "now"
+
   var scheduler = C.createQuarterScheduler(function () {
     return new Date(Date.now() + clockOffsetMs);
   }, function (d, q) {
-    if (q === 0) {
-      playEvents(C.fullChimeEvents(d.getHours(), { gap: BONG_GAP, melodyDur: MELODY_DUR }));
-    } else {
-      playEvents(C.melodyOnlyEvents());
-    }
+    playEvents(C.quarterEvents(q, d.getHours()));
   });
-
-  var clockOffsetMs = 0; // tests only: shift the app's idea of "now"
 
   // ---------- UI ----------
   var $clock = document.getElementById('clock');
-  var $btnFull = document.getElementById('btn-full');
+  var $btnQ = {
+    1: document.getElementById('btn-q1'),
+    2: document.getElementById('btn-q2'),
+    3: document.getElementById('btn-q3'),
+    0: document.getElementById('btn-q4')
+  };
   var $btnBongs = document.getElementById('btn-bongs');
   var $btnQuarter = document.getElementById('btn-quarter');
+  var $btnStop = document.getElementById('btn-stop');
   var $btnMute = document.getElementById('btn-mute');
   var $vol = document.getElementById('volume');
 
@@ -167,7 +217,6 @@
   function renderQuarter() {
     $btnQuarter.classList.toggle('on', quarterOn);
     $btnQuarter.setAttribute('aria-pressed', String(quarterOn));
-    $btnQuarter.querySelector('.state').textContent = quarterOn ? 'ZAP' : 'VYP';
   }
 
   function renderMute() {
@@ -202,14 +251,18 @@
     };
   }
 
-  $btnFull.addEventListener('click', userPlay(function () {
-    var d = new Date(Date.now() + clockOffsetMs);
-    return C.fullChimeEvents(d.getHours(), { gap: BONG_GAP, melodyDur: MELODY_DUR });
-  }));
+  function currentHour() {
+    return new Date(Date.now() + clockOffsetMs).getHours();
+  }
+
+  [1, 2, 3, 0].forEach(function (q) {
+    $btnQ[q].addEventListener('click', userPlay(function () {
+      return C.quarterEvents(q, currentHour());
+    }));
+  });
 
   $btnBongs.addEventListener('click', userPlay(function () {
-    var d = new Date(Date.now() + clockOffsetMs);
-    return C.bongsOnlyEvents(d.getHours(), { gap: BONG_GAP });
+    return C.bongsOnlyEvents(currentHour());
   }));
 
   $btnQuarter.addEventListener('click', function () {
@@ -218,6 +271,15 @@
     renderQuarter();
     saveState();
     if (quarterOn) unlock(); // pre-unlock so the next mark can sound unattended
+  });
+
+  // STOP: silence everything now, kill all pending timers (the auto toggle
+  // stays as it is — stopping sound is not switching the mode off).
+  $btnStop.addEventListener('click', function () {
+    cancelAll();
+    $btnStop.classList.remove('pressed');
+    void $btnStop.offsetWidth; // restart the pulse animation
+    $btnStop.classList.add('pressed');
   });
 
   $btnMute.addEventListener('click', function () {
@@ -263,6 +325,9 @@
     scheduler: scheduler,
     playOne: playOne,
     unlock: unlock,
+    playQuarter: function (q) { return userPlay(function () {
+      return C.quarterEvents(q, currentHour());
+    }); },
     isUnlocked: function () { return unlocked; },
     playErrors: function () { return playErrors.slice(); },
     setClockOffset: function (ms) { clockOffsetMs = ms; renderClock(); },

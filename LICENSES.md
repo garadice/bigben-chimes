@@ -6,14 +6,15 @@ taken from any app store product. Public-domain (PD) material needs no
 attribution legally, but we credit it anyway; CC BY material requires the
 attribution shown here and in the app footer.
 
-## Audio — `audio/melody.m4a` + `audio/melody.ogg`
+All audio assets are cut from ONE public-domain source recording (details
+below); every cut re-encodes to AAC 160 kbps `.m4a` + Vorbis q6 `.ogg`,
+peak-normalised to −1.5 dBFS, with short de-click fades.
 
-- **What:** the full Westminster Quarters chime sequence played by Big Ben,
-  broadcast live at midnight GMT on 1 January 1945 (Radio Oranje New Year
-  broadcast). Trimmed to 3.38–21.05 s of the source (melody only, before the
-  first hour strike), peak-normalised to −1.5 dBFS. Shipped as AAC `.m4a`
-  (160 kbps) plus a Vorbis `.ogg` fallback (q 6) — the app picks whichever
-  the browser can play (`canPlayType`).
+## Source recording (all `audio/*` files)
+
+- **What:** Big Ben broadcasting live at midnight GMT on 1 January 1945
+  (Radio Oranje New Year broadcast): the Westminster Quarters chime and the
+  12 midnight strikes of the Great Bell.
 - **Source file:** Wikimedia Commons —
   <https://commons.wikimedia.org/wiki/File:Westminster_chimes_(1_January_1945).wav>
 - **Author / uploader:** recording: Radio Oranje (1945); Commons file by
@@ -22,13 +23,25 @@ attribution shown here and in the app footer.
 - **License:** Public domain (`{{PD-EU-audio}}` — sound recording, copyright
   expired in the EU).
 
-## Audio — `audio/bong.m4a` + `audio/bong.ogg`
+## The shipped cuts — `audio/*`
 
-- **What:** a single Big Ben hour strike ("bong") with its natural decay.
-  Cut from the same 1945 broadcast (source range 41.60–45.70 s, one strike),
-  same normalisation and dual encoding as the melody. The app repeats it
-  with ~2 s spacing to strike the hour.
-- **Source / author / license:** same as the melody above.
+| file | content | source range |
+|---|---|---|
+| `melody.*` | recorded pre-strike chime = **changes 4+5** of the hour change + tonic ring-out, 17.67 s (v1 asset, unchanged) | 3.38–21.05 s |
+| `q45a.*` | the same recorded changes 4+5, trimmed before the ring-out (the :45 base), 12.20 s | 3.30–15.50 s |
+| `n-gs4.*` | single **G#4** quarter-bell slice, 1.30 s | 12.72–14.02 s |
+| `n-fs4.*` | single **F#4** quarter-bell slice, 1.15 s | 2.30–3.45 s |
+| `n-e4.*` | single **E4** quarter-bell slice, 1.41 s | 14.05–15.45 s |
+| `n-b3.*` | single **B3** quarter-bell slice, 1.51 s | 9.55–11.05 s |
+| `bong.*` | ONE hour strike + natural decay, 3.43 s (v1's cut contained the first 0.10 s of the NEXT strike — fixed) | 41.47–44.90 s |
+
+**Correction vs v1:** v1 described `melody.*` as "the full Westminster
+Quarters sequence". Detailed pitch mapping of the source (see `docs/DEV.md`)
+shows the file catches the broadcast chime already in progress: it contains
+changes 4 and 5 of the hour change (8 of the 16 notes), ending on the tonic
+E. The audio was always genuine; only the description was wrong. The
+remaining changes are assembled in-app from the four bell slices at the
+recording's own rhythm — all from the same PD source, nothing synthesised.
 
 ## Photo — `photo/bigben.jpg`
 
@@ -63,7 +76,6 @@ attribution shown here and in the app footer.
   uploader has no machine-readable author/source ("own work assumed"),
   provenance too weak for the "skip anything with unclear licensing" rule.
   Not shipped.
-- Distinct 15/30/45 quarter phrases — no freely-licensed recordings of the
-  individual short quarter phrases exist in our sources (the phrases run
-  together inside the continuous 1945 sequence and cannot be cut cleanly),
-  so quarters play the full recorded sequence. See `docs/DEV.md`.
+- Synthesised bell tones for the missing phrases — rejected on principle:
+  the product is REAL Big Ben. The per-quarter phrases are assembled from
+  recorded bell slices instead (see `docs/DEV.md` for the slicing map).

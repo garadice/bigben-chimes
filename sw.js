@@ -6,7 +6,7 @@
  * deletes the old cache. That is the deploy cache-bust mechanism.
  * (Convention: coder branches ship the right starting name; main applies
  * the bump when merging/deploying, one bump per release.) */
-const CACHE = 'bigben-chimes-v1.0.1';
+const CACHE = 'bigben-chimes-v1.1.0';
 
 const ASSETS = [
   './',
@@ -19,6 +19,16 @@ const ASSETS = [
   'audio/melody.ogg',
   'audio/bong.m4a',
   'audio/bong.ogg',
+  'audio/q45a.m4a',
+  'audio/q45a.ogg',
+  'audio/n-gs4.m4a',
+  'audio/n-gs4.ogg',
+  'audio/n-fs4.m4a',
+  'audio/n-fs4.ogg',
+  'audio/n-e4.m4a',
+  'audio/n-e4.ogg',
+  'audio/n-b3.m4a',
+  'audio/n-b3.ogg',
   'photo/bigben.jpg',
   'icons/icon-192.png',
   'icons/icon-512.png',
