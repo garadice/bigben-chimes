@@ -98,6 +98,18 @@ test('STOP also invalidates a pending NotAllowedError playback retry', async () 
   assert.equal(h.audio.every(p => p.paused), true);
 });
 
+test('failed audio priming is not reported as unlocked and can retry', async () => {
+  const h = harness();
+  h.app.unlock();
+  h.rejectAudio('NotAllowedError');
+  await h.settle();
+  assert.equal(h.app.isUnlocked(), false);
+  h.app.unlock();
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.app.isUnlocked(), true);
+});
+
 test('concurrent unlock callers wait for the same in-flight audio sweep', async () => {
   const h = harness();
   let first = false;

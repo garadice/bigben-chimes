@@ -61,7 +61,7 @@
    * every player muted so later unmuted play() calls are allowed.
    */
   function unlock() {
-    if (unlocked) return Promise.resolve();
+    if (unlocked) return Promise.resolve(true);
     if (unlockPromise) return unlockPromise;
     var all = [players.melody, players.q30, players.q45a].concat(
       NOTE_FILES.map(function (f) { return players.notes[f]; }),
@@ -73,13 +73,16 @@
         p.pause();
         p.currentTime = 0;
         p.muted = false;
+        return true;
       }, function () {
         p.muted = false; // play() rejected — nothing to unlock, stay silent-safe
+        return false;
       });
-    })).then(function () {
-      unlocked = true;
+    })).then(function (results) {
+      unlocked = results.every(function (ready) { return ready; });
       unlockPromise = null;
       applyVolume();
+      return unlocked;
     }, function () {
       unlockPromise = null; // allow a retry on the next gesture
     });
@@ -149,8 +152,8 @@
         playErrors.push(file + ': ' + (err && err.name || String(err)));
         if (err && err.name === 'NotAllowedError' && gen === seqGen) {
           // A gesture may unlock audio; STOP/newer taps must cancel this retry too.
-          return unlock().then(function () {
-            if (gen !== seqGen) return;
+          return unlock().then(function (ready) {
+            if (!ready || gen !== seqGen) return;
             try { el.currentTime = 0; } catch (e2) { /* harmless */ }
             return el.play();
           }).catch(function (err2) {
@@ -253,8 +256,8 @@
     return function () {
       cancelAll(); // invalidate older taps even while their unlock is pending
       var gen = seqGen;
-      unlock().then(function () {
-        if (gen === seqGen) playEvents(eventsFactory());
+      unlock().then(function (ready) {
+        if (ready && gen === seqGen) playEvents(eventsFactory());
       });
     };
   }
