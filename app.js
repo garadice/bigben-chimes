@@ -45,7 +45,7 @@
   var volume = 0.9;
   var muted = false;
   var unlocked = false;
-  var unlocking = false; // first double-tap used to run the muted sweep twice
+  var unlockPromise = null; // every caller must await the SAME muted sweep
 
   function applyVolume() {
     players.melody.volume = muted ? 0 : volume;
@@ -59,12 +59,12 @@
    * every player muted so later unmuted play() calls are allowed.
    */
   function unlock() {
-    if (unlocked || unlocking) return Promise.resolve();
-    unlocking = true;
+    if (unlocked) return Promise.resolve();
+    if (unlockPromise) return unlockPromise;
     var all = [players.melody, players.q45a].concat(
       NOTE_FILES.map(function (f) { return players.notes[f]; }),
       players.bongs);
-    return Promise.all(all.map(function (p) {
+    unlockPromise = Promise.all(all.map(function (p) {
       p.muted = true;
       var pr = p.play();
       return Promise.resolve(pr).then(function () {
@@ -76,11 +76,12 @@
       });
     })).then(function () {
       unlocked = true;
-      unlocking = false;
+      unlockPromise = null;
       applyVolume();
     }, function () {
-      unlocking = false; // allow a retry on the next gesture
+      unlockPromise = null; // allow a retry on the next gesture
     });
+    return unlockPromise;
   }
 
   // ---------- sequencer ----------
