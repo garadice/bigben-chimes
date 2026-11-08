@@ -1,17 +1,17 @@
 /* Big Ben Chimes — UI wiring: audio pool, gesture unlock, sequencer,
  * quarter scheduler, clock display, volume/mute, bong counter, sway,
- * vibration, STOP. Pure logic lives in chime.js (v1.1: per-quarter events).
+ * vibration, STOP, hour picker. Pure logic lives in chime.js
+ * (v1.2: melody-only :00 button, picker with chosen-N strikes).
  *
  * Test hooks (mirrors the london-boom __TEST__ pattern):
  *   window.__BBC__.playEvents / cancelAll / players / scheduler /
- *   setClockOffset / playQuarter / stats
+ *   setClockOffset / playQuarter / stats / pickerState
  */
 (function () {
   'use strict';
 
   var C = window.Chimes;   // evidence-derived timing constants live there
 
-  var NOTE_FILES = ['n-gs4', 'n-fs4', 'n-e4', 'n-b3'];
   var BONG_POOL_SIZE = 4;    // overlapping decays need more than one player
   var MAX_EVENT_LATE_MS = 1000; // suspended tabs must not dump queued notes at once
 
@@ -33,11 +33,10 @@
   var players = {
     melody: makePlayer('melody'),
     q30: makePlayer('q30'),
-    q45a: makePlayer('q45a'),
-    notes: {},
+    q15: makePlayer('q15'),
+    q45: makePlayer('q45'),
     bongs: []
   };
-  NOTE_FILES.forEach(function (f) { players.notes[f] = makePlayer(f); });
   for (var i = 0; i < BONG_POOL_SIZE; i++) {
     players.bongs.push(makePlayer('bong'));
   }
@@ -52,8 +51,8 @@
   function applyVolume() {
     players.melody.volume = muted ? 0 : volume;
     players.q30.volume = muted ? 0 : volume;
-    players.q45a.volume = muted ? 0 : volume;
-    NOTE_FILES.forEach(function (f) { players.notes[f].volume = muted ? 0 : volume; });
+    players.q15.volume = muted ? 0 : volume;
+    players.q45.volume = muted ? 0 : volume;
     players.bongs.forEach(function (p) { p.volume = muted ? 0 : volume; });
   }
 
@@ -64,9 +63,8 @@
   function unlock() {
     if (unlocked) return Promise.resolve(true);
     if (unlockPromise) return unlockPromise;
-    var all = [players.melody, players.q30, players.q45a].concat(
-      NOTE_FILES.map(function (f) { return players.notes[f]; }),
-      players.bongs);
+    var all = [players.melody, players.q30, players.q15, players.q45]
+      .concat(players.bongs);
     unlockPromise = Promise.all(all.map(function (p) {
       p.muted = true;
       var pr = p.play();
@@ -119,8 +117,8 @@
   }
 
   function stopAllPlayers() {
-    var all = [players.melody, players.q30, players.q45a].concat(
-      NOTE_FILES.map(function (f) { return players.notes[f]; }), players.bongs);
+    var all = [players.melody, players.q30, players.q15, players.q45]
+      .concat(players.bongs);
     all.forEach(function (p) {
       try {
         p.pause();
@@ -132,18 +130,20 @@
   function playerFor(file) {
     if (file === 'melody') return players.melody;
     if (file === 'q30') return players.q30;
-    if (file === 'q45a') return players.q45a;
+    if (file === 'q15') return players.q15;
+    if (file === 'q45') return players.q45;
     if (file === 'bong') {
       var el = players.bongs[bongCursor % players.bongs.length];
       bongCursor++;
       return el;
     }
-    return players.notes[file]; // n-gs4 / n-fs4 / n-e4 / n-b3
+    return null; // defensive: unknown file stays silent-safe
   }
 
   function playOne(file) {
     var gen = seqGen;
     var el = playerFor(file);
+    if (!el) return Promise.resolve();
     try {
       el.currentTime = 0;
     } catch (e) { /* seek before metadata is harmless */ }
@@ -166,8 +166,13 @@
     return pr || Promise.resolve();
   }
 
-  /** Schedule an event timeline [{file, at, n?}] (seconds). Returns gen id. */
-  function playEvents(events) {
+  /**
+   * Schedule an event timeline [{file, at, n?}] (seconds). onEnd fires once
+   * after the last event +1.2 s; onStart fires once right after scheduling
+   * (post-cancelAll). Both are suppressed by a newer tap or STOP.
+   * Returns gen id.
+   */
+  function playEvents(events, onEnd, onStart) {
     cancelAll();
     var gen = ++seqGen;
     var t0 = Date.now();
@@ -183,6 +188,13 @@
         if (ev.file === 'bong') onBongFeedback(ev.n);
       }, delayMs));
     });
+    if (onEnd) {
+      var lastAt = events.length ? events[events.length - 1].at : 0;
+      seqTimers.push(setTimeout(function () {
+        if (gen === seqGen) onEnd();
+      }, lastAt * 1000 + 1200));
+    }
+    if (onStart && gen === seqGen) onStart();
     return gen;
   }
 
@@ -194,6 +206,7 @@
     if (swayTimer) { clearTimeout(swayTimer); swayTimer = null; }
     $count.classList.remove('show');
     if ($tower) $tower.classList.remove('sway');
+    hideArmed();
     stopAllPlayers();
   }
 
@@ -223,6 +236,79 @@
   var $btnStop = document.getElementById('btn-stop');
   var $btnMute = document.getElementById('btn-mute');
   var $vol = document.getElementById('volume');
+
+  // ---------- hour picker ----------
+  var $btnPicker = document.getElementById('btn-picker');
+  var $picker = document.getElementById('picker');
+  var $pickerPlay = document.getElementById('picker-play');
+  var $pickerClose = document.getElementById('picker-close');
+  var $armed = document.getElementById('armed');
+  var $pickerNums = {};
+  for (var h = 1; h <= 12; h++) {
+    $pickerNums[h] = document.getElementById('btn-p' + h);
+  }
+  var pickerOpen = false;
+  var pickerHour = null; // chosen hour, cleared once playback starts
+
+  function renderPicker() {
+    for (var n = 1; n <= 12; n++) {
+      $pickerNums[n].classList.toggle('sel', pickerHour === n);
+    }
+    $pickerPlay.classList.toggle('ready', pickerHour != null);
+    $pickerPlay.setAttribute('aria-disabled', pickerHour == null ? 'true' : 'false');
+    $pickerPlay.textContent = pickerHour != null ? '▶ ' + pickerHour : '▶';
+  }
+
+  function openPicker() {
+    pickerOpen = true;
+    $picker.classList.add('open');
+    $btnPicker.classList.add('on');
+    $picker.setAttribute('aria-hidden', 'false');
+    renderPicker();
+  }
+
+  function closePicker() {
+    pickerOpen = false;
+    $picker.classList.remove('open');
+    $btnPicker.classList.remove('on');
+    $picker.setAttribute('aria-hidden', 'true');
+  }
+
+  function showArmed(n) {
+    $armed.textContent = '🔔 ' + n;
+    $armed.classList.add('show');
+  }
+
+  function hideArmed() {
+    if ($armed) $armed.classList.remove('show');
+  }
+
+  $btnPicker.addEventListener('click', function () {
+    if (pickerOpen) closePicker(); else openPicker();
+  });
+  $pickerClose.addEventListener('click', closePicker);
+
+  (function () {
+    for (var n = 1; n <= 12; n++) {
+      (function (n) {
+        $pickerNums[n].addEventListener('click', function () {
+          pickerHour = n;
+          renderPicker();
+        });
+      })(n);
+    }
+  })();
+
+  $pickerPlay.addEventListener('click', function () {
+    if (pickerHour == null) return;
+    var n = pickerHour;
+    pickerHour = null;      // the choice is consumed; next open starts fresh
+    renderPicker();
+    closePicker();
+    userPlay(function () {
+      return C.hourPickerEvents(n);
+    }, hideArmed, function () { showArmed(n); })();
+  });
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -260,12 +346,12 @@
     } catch (e) { /* defaults */ }
   }
 
-  function userPlay(eventsFactory) {
+  function userPlay(eventsFactory, onEnd, onStart) {
     return function () {
       cancelAll(); // invalidate older taps even while their unlock is pending
       var gen = seqGen;
       unlock().then(function (ready) {
-        if (ready && gen === seqGen) playEvents(eventsFactory());
+        if (ready && gen === seqGen) playEvents(eventsFactory(), onEnd, onStart);
       });
     };
   }
@@ -276,7 +362,8 @@
 
   [1, 2, 3, 0].forEach(function (q) {
     $btnQ[q].addEventListener('click', userPlay(function () {
-      return C.quarterEvents(q, currentHour());
+      // the full-hour SQUARE plays only the melody (v1.2): zero strikes
+      return q === 0 ? C.melodyOnlyEvents() : C.quarterEvents(q, currentHour());
     }));
   });
 
@@ -295,6 +382,7 @@
   // STOP: silence everything now, kill all pending timers (the auto toggle
   // stays as it is — stopping sound is not switching the mode off).
   $btnStop.addEventListener('click', function () {
+    closePicker();
     cancelAll();
     $btnStop.classList.remove('pressed');
     void $btnStop.offsetWidth; // restart the pulse animation
@@ -315,6 +403,9 @@
     renderMute();
     saveState();
   });
+
+  // Tapping the clock opens the picker too (kid-sized target, same action).
+  $clock.addEventListener('click', function () { openPicker(); });
 
   // First touch anywhere unlocks audio (Android Chrome gesture rule).
   ['pointerdown', 'touchend'].forEach(function (evtName) {
@@ -345,7 +436,7 @@
     playOne: playOne,
     unlock: unlock,
     playQuarter: function (q) { return userPlay(function () {
-      return C.quarterEvents(q, currentHour());
+      return q === 0 ? C.melodyOnlyEvents() : C.quarterEvents(q, currentHour());
     })(); },
     isUnlocked: function () { return unlocked; },
     playErrors: function () { return playErrors.slice(); },
@@ -356,6 +447,9 @@
       renderQuarter();
     },
     isQuarterOn: function () { return quarterOn; },
+    pickerState: function () { return { open: pickerOpen, hour: pickerHour }; },
+    openPicker: openPicker,
+    closePicker: closePicker,
     stats: function () {
       return {
         timers: seqTimers.length,
@@ -375,4 +469,5 @@
   renderClock();
   renderQuarter();
   renderMute();
+  renderPicker();
 })();

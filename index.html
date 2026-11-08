@@ -17,6 +17,7 @@
   <div class="dial"><time id="clock">--:--</time></div>
 
   <div class="count" id="count" aria-hidden="true"></div>
+  <div class="armed" id="armed" aria-hidden="true"></div>
 
   <!-- kid-tappable column on the right edge; emoji only, nothing to read -->
   <nav class="pad" aria-label="Zvony">
@@ -29,11 +30,14 @@
     <button id="btn-q3" class="sq" aria-label="Tri štvrte (45)">
       <span class="ico" aria-hidden="true">🕘</span>
     </button>
-    <button id="btn-q4" class="sq" aria-label="Celá hodina (zvoní + bongy)">
+    <button id="btn-q4" class="sq" aria-label="Celá hodina (melódia)">
       <span class="ico" aria-hidden="true">🕛</span>
     </button>
     <button id="btn-bongs" class="sq" aria-label="Len bongy">
       <span class="ico" aria-hidden="true">🛎️</span>
+    </button>
+    <button id="btn-picker" class="sq" aria-label="Vybrať hodinu a zvoníť" aria-haspopup="dialog">
+      <span class="ico" aria-hidden="true">🔔</span>
     </button>
     <button id="btn-quarter" class="sq toggle" aria-pressed="false" aria-label="Každú štvrť automaticky">
       <span class="ico" aria-hidden="true">⏰</span>
@@ -43,6 +47,26 @@
       <span class="ico" aria-hidden="true">✋</span>
     </button>
   </nav>
+
+  <!-- translucent hour picker: numbers 1–12, one big play button, photo shows through -->
+  <div class="picker" id="picker" role="dialog" aria-label="Vybrať hodinu" aria-hidden="true">
+    <button id="picker-close" class="pclose" aria-label="Zavrieť">✕</button>
+    <div class="pgrid" role="group" aria-label="Hodiny">
+      <button id="btn-p1" class="pnum" aria-label="Hodina 1">1</button>
+      <button id="btn-p2" class="pnum" aria-label="Hodina 2">2</button>
+      <button id="btn-p3" class="pnum" aria-label="Hodina 3">3</button>
+      <button id="btn-p4" class="pnum" aria-label="Hodina 4">4</button>
+      <button id="btn-p5" class="pnum" aria-label="Hodina 5">5</button>
+      <button id="btn-p6" class="pnum" aria-label="Hodina 6">6</button>
+      <button id="btn-p7" class="pnum" aria-label="Hodina 7">7</button>
+      <button id="btn-p8" class="pnum" aria-label="Hodina 8">8</button>
+      <button id="btn-p9" class="pnum" aria-label="Hodina 9">9</button>
+      <button id="btn-p10" class="pnum" aria-label="Hodina 10">10</button>
+      <button id="btn-p11" class="pnum" aria-label="Hodina 11">11</button>
+      <button id="btn-p12" class="pnum" aria-label="Hodina 12">12</button>
+    </div>
+    <button id="picker-play" class="pplay" aria-disabled="true" aria-label="Zvoníť vybranú hodinu">▶</button>
+  </div>
 
   <div class="volwrap">
     <button id="btn-mute" aria-label="Ticho">🔊</button>

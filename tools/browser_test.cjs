@@ -28,7 +28,8 @@ const checks=[];
 const errors=[];
 function check(condition,name,detail){checks.push({name,pass:!!condition,detail});if(!condition)errors.push({name,detail});}
 async function census(page,label){
- const inventory=await page.locator('button,input,a,select,textarea,[role=button],summary').evaluateAll(nodes=>nodes.map(e=>({selector:'#'+e.id,label:e.getAttribute('aria-label')||e.textContent,tag:e.tagName,disabled:e.disabled||false,rect:e.getBoundingClientRect().toJSON()})));
+ const inventory=await page.locator('button,input,a,select,textarea,[role=button],summary').evaluateAll(nodes=>nodes.filter(e=>{
+  const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}).map(e=>({selector:'#'+e.id,label:e.getAttribute('aria-label')||e.textContent,tag:e.tagName,disabled:e.disabled||false,rect:e.getBoundingClientRect().toJSON()})));
  controls.push({screen:label,count:inventory.length,controls:inventory});return inventory;
 }
 async function dragVolume(page,context,to){
@@ -56,6 +57,25 @@ async function operateSurface(page,context,label){
  await page.locator('#btn-mute').tap();
  for(const target of [.15,.85,.4])await dragVolume(page,context,target);
 }
+async function pickerGeometry(page,label,width,height){
+ await page.locator('#btn-picker').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open),label+' picker opens');
+ check(await page.locator('#picker').evaluate(e=>getComputedStyle(e).display==='flex'),label+' picker overlay is displayed');
+ const alpha=await page.locator('#picker').evaluate(e=>getComputedStyle(e).backgroundColor);
+ check(/rgba\([^)]+,\s*0\.\d+\)/.test(alpha),label+' picker overlay is translucent ('+alpha+')');
+ const photoVisible=await page.evaluate(()=>{const p=document.querySelector('.tower');return p.naturalWidth>0;});
+ check(photoVisible,label+' photo stays loaded behind the overlay');
+ const inventory=await census(page,label+' picker');
+ for(const item of inventory){const r=item.rect;check(r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' picker bounds '+item.selector,r);}
+ await page.screenshot({path:path.join(OUT,'picker-'+label+'.png')});
+ await page.locator('#picker-close').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker close button closes');
+ // the overlay covers the pad while open (modal by design): reopen and close again
+ await page.locator('#btn-picker').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open===true),label+' picker square reopens');
+ await page.locator('#picker-close').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker closes again via the close button');
+}
 async function geometry(page,context){
  for(const [width,height] of [[390,844],[375,812],[1280,800],[844,390],[568,320],[320,568]]){
   await page.setViewportSize({width,height});const label=width+'x'+height;
@@ -67,6 +87,7 @@ async function geometry(page,context){
   check(!credit.clipped&&credit.text.includes('creativecommons.org/licenses/by/2.5/'),label+' complete license attribution',credit);
   if(width===390||width>height)await page.screenshot({path:path.join(OUT,'layout-'+label+'.png')});
   await operateSurface(page,context,label);
+  await pickerGeometry(page,label,width,height);
  }
 }
 const INIT=()=>{
@@ -88,15 +109,17 @@ async function files(page){return page.evaluate(()=>__audioLog.filter(e=>e.statu
 async function playback(page){
  await page.setViewportSize({width:390,height:844});await shift(page,13,7);
  await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
- check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentTime>.1),'first tap really advances decoded audio');
- await waitPlays(page,4);check(JSON.stringify(await files(page))===JSON.stringify(['n-gs4','n-fs4','n-e4','n-b3']),':15 four correct actual plays');
+ check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),':15 assembled asset really advances decoded audio');
+ check(JSON.stringify(await files(page))===JSON.stringify(['q15']),':15 is one assembled change-1 asset');
  await resetLog(page);await page.locator('#btn-q2').tap();await waitPlays(page,1);await page.waitForTimeout(220);
  check(await page.evaluate(()=>__BBC__.players.q30.currentTime>.1),':30 recorded eight-note asset advances');
- await resetLog(page);await page.locator('#btn-q3').tap();await waitPlays(page,5);
- check(JSON.stringify(await files(page))===JSON.stringify(['q45a','n-gs4','n-fs4','n-e4','n-b3']),':45 recorded eight + four notes');
- await resetLog(page);await page.locator('#btn-q4').tap();await waitPlays(page,2);
- check(JSON.stringify(await files(page))===JSON.stringify(['melody','bong']),':00 complete recording then hour strike');
- check(await page.locator('#count').textContent()==='1',':00 counter shows the real first strike');
+ await resetLog(page);await page.locator('#btn-q3').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(await page.evaluate(()=>__BBC__.players.q45.currentTime>.1),':45 joined changes-4+5+1 asset advances');
+ check(JSON.stringify(await files(page))===JSON.stringify(['q45']),':45 is one joined asset');
+ await resetLog(page);await page.locator('#btn-q4').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(JSON.stringify(await files(page))===JSON.stringify(['melody']),':00 button = melody ONLY');
+ await page.waitForTimeout(1300);
+ check((await files(page)).length===1,'no bong ever arrives from the :00 button');
  await shift(page,15,7);await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,3);
  const bongs=await page.evaluate(()=>__audioLog.filter(e=>e.file==='bong'&&e.status==='playing'));
  check(bongs.length===3,'BONGY uses the current twelve-hour count');
@@ -106,16 +129,44 @@ async function playback(page){
  check(await page.evaluate(()=>__vibration.length===3&&__vibration.every(v=>v===140)),'vibration hook per bong');
  await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,1);await page.locator('#btn-stop').tap();await page.waitForTimeout(4200);
  check((await files(page)).length===1,'STOP prevents the next real scheduled strike');
- check(await page.evaluate(()=>[__BBC__.players.melody,__BBC__.players.q30,__BBC__.players.q45a,...Object.values(__BBC__.players.notes),...__BBC__.players.bongs].every(p=>p.paused)),'STOP pauses every actual media element');
+ check(await page.evaluate(()=>[__BBC__.players.melody,__BBC__.players.q30,__BBC__.players.q15,__BBC__.players.q45,...__BBC__.players.bongs].every(p=>p.paused)),'STOP pauses every actual media element');
  await page.emulateMedia({reducedMotion:'reduce'});await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,1);
  check(await page.locator('.tower').evaluate(e=>getComputedStyle(e).animationName==='none'),'reduced motion disables tower sway');
  await page.locator('#btn-stop').tap();check(await page.locator('#btn-stop').evaluate(e=>getComputedStyle(e).animationName==='none'),'reduced motion disables STOP pulse');
  await page.emulateMedia({reducedMotion:'no-preference'});
 }
+async function pickerPlayback(page){
+ await page.setViewportSize({width:390,height:844});await shift(page,13,7);
+ await resetLog(page);
+ await page.locator('#clock').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open),'tapping the clock opens the picker');
+ await page.locator('#btn-p2').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().hour===2),'chosen hour 2 is armed');
+ check((await page.locator('#picker-play').textContent()).includes('2'),'play button shows the chosen hour');
+ await page.locator('#picker-play').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open===false),'overlay closes after use');
+ check(await page.evaluate(()=>__BBC__.pickerState().hour===null),'choice is consumed');
+ await waitPlays(page,3);
+ const log=await page.evaluate(()=>__audioLog.filter(e=>e.status==='playing'));
+ check(JSON.stringify(log.map(e=>e.file))===JSON.stringify(['melody','bong','bong']),
+   'picker 2 = melody then EXACTLY two bongs');
+ const bongGap=log.length===3?(log[2].at-log[1].at)/1000:null;
+ check(Math.abs(bongGap-4.015)<.15,'picker bong spacing = measured 4.015 s',{bongGap});
+ check(await page.locator('#armed').textContent()==='🔔 2','armed badge shows the chosen hour');
+ check(await page.locator('#armed').evaluate(e=>e.classList.contains('show')),'armed badge is visible while playing');
+ check(await page.evaluate(()=>__vibration.length===2),'picker strikes vibrate like real bongs');
+ await page.locator('#btn-stop').tap();await page.waitForTimeout(300);
+ check(await page.evaluate(()=>__BBC__.pickerState().open===false),'STOP closes the picker');
+ check(await page.locator('#armed').evaluate(e=>!e.classList.contains('show')),'STOP clears the armed badge');
+ const still=await page.evaluate(()=>__audioLog.filter(e=>e.status==='playing').length);
+ check(still===3,'STOP prevented the remaining strikes (only the 3 already played)');
+ check(await page.evaluate(()=>__BBC__.stats().timers===0),'STOP killed every pending picker strike');
+ await page.screenshot({path:path.join(OUT,'picker-after-stop.png')});
+}
 async function autoAndPersistence(page){
  await shift(page,13,7);await resetLog(page);await page.locator('#btn-quarter').tap();
  check(await page.evaluate(()=>localStorage.getItem('bbc-quarter')==='1'),'auto ON is persisted');
- for(const [h,m,file,q] of [[13,15,'n-gs4',1],[13,30,'q30',2],[13,45,'q45a',3],[14,0,'melody',0]]){
+ for(const [h,m,file,q] of [[13,15,'q15',1],[13,30,'q30',2],[13,45,'q45',3],[14,0,'melody',0]]){
   await resetLog(page);await shift(page,h,m);await waitPlays(page,1);
   check((await files(page))[0]===file,'automatic mark '+m+' selects correct sequence');
   if(q===0)check(await page.evaluate(()=>__BBC__.stats().timers===3),'automatic hour includes two pending strikes at 14:00');
@@ -134,26 +185,27 @@ async function autoAndPersistence(page){
  await resetLog(page);await page.locator('#btn-quarter').tap();
 }
 async function offlineUpgrade(browser,base){
- revision='d6b60f3';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ revision='bc8bd69';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
- check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.0.1')),'real previous release cache installed');
+ check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.1.0')),'real previous release cache installed');
  await page.evaluate(async()=>{await caches.open('unrelated-app-v1');window.__controllerChanged=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{window.__controllerChanged=true;});});revision=null;
  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
  await page.waitForFunction(()=>window.__controllerChanged&&navigator.serviceWorker.controller.state==='activated');
  check(await page.evaluate(async()=>(await caches.keys()).includes('unrelated-app-v1')),'real upgrade preserves unrelated caches');
- const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.1.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-q1')};});
+ const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
  console.log('activated upgrade',state);
  check(state.newUI,'upgraded release actually contains the new page',state);
- await page.reload();await page.waitForSelector('#btn-q1');
+ await page.reload();await page.waitForSelector('#btn-picker');
  const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');const assets=[...sw.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
- const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.1.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
+ const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.2.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
  check(!missing.length&&state.count===assets.length,'all release assets cached after upgrade',{count:assets.length,missing});
  const before=serverRequests.length;await page.reload();await page.waitForTimeout(150);
  check(serverRequests.slice(before).filter(p=>p!=='sw.js').length===0,'cached reload makes no asset refetches',serverRequests.slice(before));
  await context.setOffline(true);await page.reload();await page.waitForFunction(()=>document.querySelector('.tower').naturalWidth>0);
  await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
- check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentTime>.1),'upgraded app and real audio work offline');
- const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.1.0'),url=new URL('audio/n-fs4.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
+ check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),'upgraded app and real audio work offline');
+ check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'offline :15 uses the new assembled asset');
+ const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.0'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
 }
@@ -161,8 +213,8 @@ async function firstAutoGesture(browser,base){
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  await context.addInitScript(()=>{const play=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){const muted=this.muted,promise=play.call(this);return muted?promise.then(()=>new Promise(resolve=>setTimeout(resolve,250))):promise;};});
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
- await shift(page,13,15,10);await page.locator('#btn-quarter').tap();await waitPlays(page,4);
- check(JSON.stringify(await files(page))===JSON.stringify(['n-gs4','n-fs4','n-e4','n-b3']),'first auto tap waits for slow real media priming');
+ await shift(page,13,15,10);await page.locator('#btn-quarter').tap();await waitPlays(page,1);
+ check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'first auto tap waits for slow real media priming');
  await page.locator('#btn-stop').tap();await context.close();
 }
 async function fallbackAndFile(browser,base){
@@ -170,11 +222,11 @@ async function fallbackAndFile(browser,base){
  await context.addInitScript(()=>{const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('audio/mp4')?'':original.call(this,type);};});
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  await context.setOffline(true);await page.reload();await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
- check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentSrc.endsWith('.ogg')&&__BBC__.players.notes['n-gs4'].currentTime>.1),'real Vorbis fallback plays offline');
+ check(await page.evaluate(()=>__BBC__.players.q15.currentSrc.endsWith('.ogg')&&__BBC__.players.q15.currentTime>.1),'real Vorbis fallback plays offline');
  await context.close();
  const local=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const file=await local.newPage();const failures=[];file.on('pageerror',e=>failures.push(String(e)));
  await file.goto('file://'+path.join(ROOT,'index.html'));
- check(await file.locator('button').count()===8&&failures.length===0,'file URL boots without service-worker errors',failures);
+ check(await file.locator('button').count()===23&&failures.length===0,'file URL boots without service-worker errors',failures);
  await local.close();
 }
 async function main(){
@@ -191,6 +243,7 @@ async function main(){
   await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   if(!process.argv.includes('--upgrade-only')){
    await playback(page);
+   await pickerPlayback(page);
    await shift(page,13,7);await geometry(page,context);
    await page.setViewportSize({width:390,height:844});await autoAndPersistence(page);
   }

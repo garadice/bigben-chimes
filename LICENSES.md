@@ -6,10 +6,11 @@ taken from any app store product. Public-domain (PD) material needs no
 attribution legally, but we credit it anyway; CC BY material requires the
 attribution shown here and in the app footer.
 
-All audio assets are cut from ONE public-domain source recording (details
-below); each cut has AAC 160 kbps `.m4a` + Vorbis q6 `.ogg` encodings and short
-de-click fades. Recut quarter assets target −3 dBFS for headroom; the retained
-hour-strike asset targets −1.5 dBFS.
+All audio assets derive from ONE public-domain source recording (details
+below). Contiguous cuts have AAC 160 kbps `.m4a` + Vorbis q6 `.ogg`
+encodings and short de-click fades. The assembled quarter assets (`q15`,
+`q45`) are built offline from the same recording at natural levels and
+target −3 dBFS; the retained hour-strike asset targets −1.5 dBFS.
 
 ## Source recording (all `audio/*` files)
 
@@ -24,28 +25,26 @@ hour-strike asset targets −1.5 dBFS.
 - **License:** Public domain (`{{PD-EU-audio}}` — sound recording, copyright
   expired in the EU).
 
-## The shipped cuts — `audio/*`
+## The shipped assets — `audio/*`
 
-| file | content | source range |
+| file | content | origin |
 |---|---|---|
-| `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | 0.25–21.05 s |
-| `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | 0.25–7.48 s |
-| `q45a.*` | recorded changes 4+5, 8 notes and complete final minim, 6.55 s | 7.50–14.05 s |
-| `n-gs4.*` | single **G#4** attack and decay, 0.87 s | 1.31–2.18 s |
-| `n-fs4.*` | single **F#4** attack, ends before the next B attack, 0.70 s | 2.17–2.87 s |
-| `n-e4.*` | single **E4** attack and decay, 1.06 s | 0.25–1.31 s |
-| `n-b3.*` | single **B3** attack and minim decay, 1.50 s | 2.86–4.36 s |
-| `bong.*` | ONE hour strike + natural decay, 3.43 s | 41.47–44.90 s |
+| `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | source 0.25–21.05 s |
+| `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | source 0.25–7.48 s |
+| `q15.*` | **change 1 (G#4 F#4 E4 B3) assembled from the recording's change-2 performance** — four genuine attacks with full decay tails, overlap-added at the performance's own measured rhythm (0.663/0.647/0.553 s), the final tail dissolving into the hall's real room tone, 3.44 s | source slices 1.398–2.255, 2.17–2.945, 0.25–1.395, 2.94–4.39 s |
+| `q45.*` | **recorded changes 4+5 joined to the assembled change 1** at the measured change-to-change gap (1.38 s), tonic minim ringing underneath, 10.05 s | source 7.50–14.47 s + `q15` |
+| `bong.*` | ONE hour strike + natural decay, 3.43 s | source 41.47–44.90 s |
 
-**Cross-model review correction:** the original WAV contains all 16 notes.
-The initial v1.1 slicing map confused sustained overtones with fresh bell
-attacks and wrongly claimed that changes 2+3 were absent. The corrected hour
-asset preserves all four changes; half past preserves the first two;
-quarter to preserves the last two and appends change 1 assembled from real
-single-attack slices. Quarter past uses those same four slices. All audio
-still comes from this one PD recording, nothing synthesized. Reproduction
-and decoded-waveform provenance checks are in `tools/cut_audio.py`,
-`tools/audio_test.py`, and `docs/DEV.md`.
+The broadcast does not contain change 1, so the quarter-past and
+quarter-to phrases cannot be cut contiguously from it. v1.2.0 assembles
+them offline (`tools/cut_audio.py`, numpy/scipy) instead of stitching
+per-note slices at runtime: sample-accurate measured rhythm, tails ringing
+under the next attack, natural note levels, no per-slice normalization.
+Why the assembly is seamless (provenance correlations, fingerprint-band
+pitch verification, envelope A/B against the contiguous `q30`) is
+documented in `docs/DEV.md`. Nothing is synthesized; every sample traces
+to the one PD recording. The former per-note slice assets (`n-*`) and the
+`q45a` chunk were removed in v1.2.0.
 
 ## Photo — `photo/bigben.jpg`
 
@@ -73,13 +72,20 @@ and decoded-waveform provenance checks are in `tools/cut_audio.py`,
 
 ## Considered and rejected
 
-- `File:Big Ben recorded in 1890.ogg` (Wikimedia Commons, PD) — an Edison
-  phonograph cylinder recording of Big Ben. Genuine and public-domain, but
-  the 1945 broadcast is dramatically cleaner; not shipped.
 - `File:Westminster-and-one-o-clock.ogg` (Wikimedia Commons, tagged PD) —
-  uploader has no machine-readable author/source ("own work assumed"),
-  provenance too weak for the "skip anything with unclear licensing" rule.
-  Not shipped.
+  a Kieninger mantel-clock **rod gong**, not Big Ben, plus an uploader with
+  no machine-readable author/source. Rejected.
+- `File:Big Ben recorded in 1890.ogg` (Wikimedia Commons, PD) — genuine
+  1890 Edison phonograph cylinder of Big Ben, re-checked on 2026-11-08
+  with fresh measurements: ~11 dB usable dynamic range (surface noise
+  p10 −19.7 dBFS vs p90 −8.3 dBFS), 94 spurious crackle onsets, unreliable
+  pitch content. It cannot sit next to the clean 1945 audio without a
+  jarring seam. Not shipped.
+- 2026-11-08 Commons re-search for a contiguous change 1 recording
+  (searches, category trees, Wikipedia article media lists): every other
+  audio candidate is not Big Ben (`WestminsterMetrikx3.ogg` metric
+  demonstration, Vierne organ composition, a Gdańsk museum tower clock,
+  spoken audio description, MIDI files). No usable new source exists.
 - Synthesised bell tones for the missing phrases — rejected on principle:
-  the product is REAL Big Ben. The per-quarter phrases are assembled from
-  recorded bell slices instead (see `docs/DEV.md` for the slicing map).
+  the product is REAL Big Ben. The missing change is assembled from
+  recorded bell material instead (see `docs/DEV.md`).

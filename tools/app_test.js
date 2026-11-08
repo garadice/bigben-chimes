@@ -111,7 +111,7 @@ test('first automatic quarter waits for its gesture unlock before scheduling', a
   assert.equal(h.timers.size, 0, 'the auto button must also wait for priming');
   h.resolveAudio();
   await h.settle();
-  assert.equal(h.timers.size, 4);
+  assert.equal(h.timers.size, 1, ':15 is one assembled asset event');
 });
 
 test('automatic marks before any gesture are consumed without false playback', () => {
@@ -128,7 +128,133 @@ test('the playQuarter test hook actually starts the requested quarter', async ()
   h.app.playQuarter(1);
   h.resolveAudio();
   await h.settle();
-  assert.equal(h.timers.size, 4);
+  assert.equal(h.timers.size, 1, ':15 plays one assembled asset');
+});
+
+test('the :00 button plays the melody ONLY — no strike path', async () => {
+  const h = harness();
+  h.element('btn-q4').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 1, 'melody only: a single event');
+  h.runTimers();
+  const plays = h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src);
+  assert.deepEqual(plays, ['audio/melody.m4a'], 'no bong asset is ever started');
+});
+
+test('the picker overlay opens, picks a number and arms PLAY', () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  assert.equal(h.app.pickerState().open, true);
+  assert.equal(h.app.pickerState().hour, null);
+  const play = h.element('picker-play');
+  play.fire('click'); // nothing chosen: must stay inert
+  assert.equal(h.timers.size, 0);
+  h.element('btn-p7').fire('click');
+  assert.equal(h.app.pickerState().hour, 7);
+  assert.equal(play.textContent, '▶ 7', 'the chosen hour shows on the play button');
+});
+
+test('picker PLAY schedules the melody then EXACTLY the chosen strikes', async () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p2').fire('click');
+  h.element('picker-play').fire('click');
+  assert.equal(h.app.pickerState().open, false, 'overlay closes after use');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 4, 'melody + 2 strikes + the armed-hide timer');
+  h.runTimers();
+  const plays = h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src);
+  assert.deepEqual(plays, ['audio/melody.m4a', 'audio/bong.m4a', 'audio/bong.m4a'],
+    'exactly two bong starts after the melody');
+  assert.equal(h.element('armed').classList.contains('show'), false,
+    'the armed badge clears when the timeline ends');
+});
+
+test('the armed badge shows the chosen hour while the picker plays', async () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p11').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  const armed = h.element('armed');
+  assert.equal(armed.textContent, '🔔 11');
+  assert.equal(armed.classList.contains('show'), true);
+  h.element('btn-stop').fire('click');
+  assert.equal(armed.classList.contains('show'), false, 'STOP clears the badge');
+});
+
+test('STOP kills picker playback and closes the overlay', async () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p5').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 7, 'melody + 5 strikes + armed-hide timer');
+  h.element('btn-stop').fire('click');
+  assert.equal(h.timers.size, 0, 'STOP kills the whole picker timeline');
+  assert.equal(h.audio.every(p => p.paused), true);
+  assert.equal(h.app.pickerState().open, false, 'overlay closed by STOP');
+  const due = [...h.timers.values()]; due.length = 0;
+  h.runTimers();
+  const plays = h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src);
+  assert.equal(plays.filter(s => s.endsWith('bong.m4a')).length, 0,
+    'no scheduled strike survives STOP');
+});
+
+test('the picker choice never leaks into BONGY or auto-chime', async () => {
+  const h = harness();
+  h.app.setClockOffset(new Date(2026,10,8,15,7,0).getTime()-Date.now());
+  h.element('btn-picker').fire('click');
+  h.element('btn-p7').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  h.element('btn-stop').fire('click');
+  h.element('btn-bongs').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 3, 'BONGY at 15:07 still strikes the real 3');
+  h.runTimers();
+  const plays = h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src);
+  assert.equal(plays.filter(s => s.endsWith('bong.m4a')).length, 3,
+    'BONGY count comes from the clock, not the picker');
+});
+
+test('the consumed choice resets: the next picker open starts fresh', async () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p9').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  h.element('btn-picker').fire('click');
+  assert.equal(h.app.pickerState().hour, null, 'no stale hour is preselected');
+  h.element('btn-p9').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 11, 'picker 9 again: melody + 9 strikes + hide timer');
+});
+
+test('the overlay close button closes without playing', () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p3').fire('click');
+  h.element('picker-close').fire('click');
+  assert.equal(h.app.pickerState().open, false);
+  assert.equal(h.timers.size, 0, 'closing never starts audio');
+});
+
+test('tapping the clock opens the picker', () => {
+  const h = harness();
+  h.element('clock').fire('click');
+  assert.equal(h.app.pickerState().open, true);
+  h.element('btn-picker').fire('click'); // toggle closes it again
+  assert.equal(h.app.pickerState().open, false);
 });
 
 test('a long-suspended timeline never dumps stale strikes on resume', () => {

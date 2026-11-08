@@ -63,36 +63,27 @@ eq(C.quarterKey(d(0, 1)), '2026-11-08T00:00', '00:01 keys to the 00:00 mark');
 
 console.log('== measured constants ==');
 eq(C.BONG_GAP, 4.015, 'strike gap = independently measured mean 4.015 s');
-eq(C.NOTE_STEP, 0.7, 'crotchet spacing 0.7 s (measured hammer attacks)');
-eq(C.MINIM_STEP, 1.4, 'minim slot 1.4 s');
 eq(C.MELODY_DUR, 20.8, 'complete 16-note melody asset 20.80 s');
-eq(C.Q45A_DUR, 6.55, 'q45a asset 6.55 s');
+eq(C.STRIKE_PAUSE, 0.6, 'explicit melody-end -> first-strike pause 0.6 s');
 
-console.log('== quarterEvents(1) — :15, change 1 ==');
+console.log('== quarterEvents(1) — :15, change 1 as one assembled asset ==');
 const q1 = C.quarterEvents(1, 14);
-eq(q1.map(e => e.file), ['n-gs4', 'n-fs4', 'n-e4', 'n-b3'], ':15 = 4 note slices, change 1');
-eq(q1.map(e => +e.at.toFixed(3)), [0, 0.7, 1.4, 2.1], ':15 crotchet rhythm');
-eq(q1[3].file, 'n-b3', ':15 ends on the dominant B3');
+eq(q1, [{ file: 'q15', at: 0 }], ':15 = the assembled change-1 recording, one event');
+eq(C.quarterEvents(1, 23), [{ file: 'q15', at: 0 }], ':15 never schedules strikes');
 
 console.log('== quarterEvents(2) — :30, changes 2+3 ==');
-const q2 = C.quarterEvents(2, 14);
-eq(q2.map(e => e.file), ['q30'], ':30 = recorded changes 2+3, eight attacks');
-eq(q2.map(e => e.at), [0], ':30 keeps the original recorded rhythm intact');
-eq(q2[0].file, 'q30', ':30 recorded phrase ends on tonic E4');
+eq(C.quarterEvents(2, 14), [{ file: 'q30', at: 0 }],
+   ':30 = the recorded changes-2+3 recording, one event');
 
-console.log('== quarterEvents(3) — :45, changes 4+5+1 ==');
-const q3 = C.quarterEvents(3, 14);
-eq(q3.map(e => e.file), ['q45a', 'n-gs4', 'n-fs4', 'n-e4', 'n-b3'],
-   ':45 = recorded 4+5 chunk + assembled change 1 (12 notes)');
-eq(q3.map(e => +e.at.toFixed(3)), [0, 6.55, 7.25, 7.95, 8.65],
-   ':45 change 1 starts right after the q45a chunk');
-eq(q3[4].file, 'n-b3', ':45 ends on the dominant B3');
+console.log('== quarterEvents(3) — :45, changes 4+5+1 as one joined asset ==');
+eq(C.quarterEvents(3, 14), [{ file: 'q45', at: 0 }],
+   ':45 = the joined changes-4+5+1 recording, one event');
 
-console.log('== quarterEvents(0) — :00 full hour ==');
+console.log('== quarterEvents(0) — :00 auto mode: melody AND hour strikes ==');
 const q0_15 = C.quarterEvents(0, 15);
 eq(q0_15.filter(e => e.file === 'bong').length, 3, 'hour 15 -> 3 strikes');
 eq(q0_15.filter(e => e.file !== 'bong').map(e => e.file), ['melody'],
-   ':00 = the original complete 16-note recording');
+   ':00 starts with the original complete 16-note recording');
 eq(q0_15.filter(e => e.file !== 'bong').map(e => e.at), [0], ':00 starts with the first recorded attack');
 const bongs15 = q0_15.filter(e => e.file === 'bong');
 eq(bongs15[0].at, 20.8 + 0.6, 'first strike after complete melody + pause');
@@ -104,6 +95,32 @@ for (const [h, n] of [[0, 12], [12, 12], [9, 9], [23, 11], [1, 1]]) {
   eq(ev.filter(e => e.file === 'bong').length, n, `hour ${h} -> ${n} strikes`);
 }
 
+console.log('== melodyOnlyEvents — the :00 BUTTON is melody only ==');
+eq(C.melodyOnlyEvents(), [{ file: 'melody', at: 0 }],
+   ':00 button = the 16-note recording, zero strikes');
+ok(C.melodyOnlyEvents().every(e => e.file !== 'bong'),
+   'no hidden strike path in melodyOnlyEvents');
+
+console.log('== hourPickerEvents — melody + exactly N strikes ==');
+const p1 = C.hourPickerEvents(1);
+eq(p1.filter(e => e.file === 'bong').length, 1, 'picker 1 -> exactly one strike');
+eq(p1.filter(e => e.file !== 'bong').map(e => e.file), ['melody'], 'picker 1 opens with the melody');
+near(p1.find(e => e.file === 'bong').at, 20.8 + 0.6, 1e-9, 'picker first strike after melody + pause');
+
+const p12 = C.hourPickerEvents(12);
+eq(p12.filter(e => e.file === 'bong').length, 12, 'picker 12 -> exactly twelve strikes');
+eq(p12.filter(e => e.file === 'bong').map(e => e.n), Array.from({ length: 12 }, (_, i) => i + 1),
+   'picker strikes carry 1..12 counts');
+near(p12.filter(e => e.file === 'bong')[11].at - p12.filter(e => e.file === 'bong')[0].at,
+     11 * 4.015, 1e-9, 'picker strike spacing = measured 4.015 s');
+
+for (let n = 1; n <= 12; n++) {
+  eq(C.hourPickerEvents(n).filter(e => e.file === 'bong').length, n,
+     `picker ${n} -> ${n} strikes`);
+}
+eq(C.hourPickerEvents(7).filter(e => e.file === 'bong').length, 7,
+   'picker 7 -> 7 strikes (chosen count wins over the real hour)');
+
 console.log('== bongsOnlyEvents (BONGY) ==');
 const bo = C.bongsOnlyEvents(23);
 eq(bo.length, 11, 'hour 23 -> 11 bongs only');
@@ -113,6 +130,7 @@ near(bo[10].at, 40.15, 1e-9, 'last of 11 bongs after ten measured intervals');
 eq(C.bongsOnlyEvents(0).length, 12, 'midnight -> 12 bongs');
 
 console.log('== timelines are sane ==');
+const known = new Set(['melody', 'q30', 'q45', 'q15', 'bong']);
 for (const q of [0, 1, 2, 3]) {
   const ev = C.quarterEvents(q, 10);
   let mono = true;
@@ -120,23 +138,22 @@ for (const q of [0, 1, 2, 3]) {
     if (ev[i].at <= ev[i - 1].at) mono = false;
   }
   ok(mono, `quarter ${q}: event times strictly increasing`);
+  for (const e of C.quarterEvents(q, 10)) {
+    ok(known.has(e.file), `event file "${e.file}" is a shipped asset`);
+  }
 }
 {
-  // canonical ending-pitch rule: :15/:45 dominant B3, :30/:00 tonic E4
-  const lastNote = q => {
-    const ev = C.quarterEvents(q, 10).filter(e => e.file !== 'bong');
-    return ev[ev.length - 1].file;
-  };
-  eq(lastNote(1), 'n-b3', ':15 ends B3 (dominant)');
-  eq(lastNote(2), 'q30', ':30 recorded phrase ends E4 (tonic)');
-  eq(lastNote(3), 'n-b3', ':45 ends B3 (dominant)');
-  eq(lastNote(0), 'melody', ':00 ends with the recorded tonic-E4 phrase');
-  // every event file maps to a shipped asset base
-  const known = new Set(['melody', 'q30', 'q45a', 'bong', 'n-gs4', 'n-fs4', 'n-e4', 'n-b3']);
-  for (const q of [0, 1, 2, 3]) {
-    for (const e of C.quarterEvents(q, 10)) {
-      ok(known.has(e.file), `event file "${e.file}" is a shipped asset`);
-    }
+  // canonical ending rule: :15/:45 end on the dominant B3, :30/:00 on tonic E4.
+  // :15 and :45 are single assets whose final note is asserted by
+  // tools/audio_test.py (fingerprint bands); here we assert the asset choice.
+  eq(C.quarterEvents(1, 10)[0].file, 'q15', ':15 = change-1 asset (ends B3, verified in audio_test.py)');
+  eq(C.quarterEvents(2, 10)[0].file, 'q30', ':30 recorded phrase ends E4 (tonic)');
+  eq(C.quarterEvents(3, 10)[0].file, 'q45', ':45 joined asset (ends B3, verified in audio_test.py)');
+  eq(C.melodyOnlyEvents()[0].file, 'melody', ':00 button ends with the recorded tonic-E4 phrase');
+  const all = [...C.quarterEvents(0, 10), ...C.melodyOnlyEvents(),
+               ...C.hourPickerEvents(12), ...C.bongsOnlyEvents(10)];
+  for (const e of all) {
+    ok(known.has(e.file), `event file "${e.file}" is a shipped asset`);
   }
 }
 
