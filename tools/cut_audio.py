@@ -97,6 +97,10 @@ def slice_seg(src, start, end, pre_fade_ms=3):
     seg = src[a:b].copy()
     nf = int(pre_fade_ms / 1000 * SR)
     seg[:nf] *= np.linspace(0, 1, nf)[:, None]
+    # A channel-mean zero crossing need not be zero in EITHER channel.
+    # End each outgoing layer smoothly while the next bell rings underneath.
+    tail = min(len(seg), int(0.080 * SR))
+    seg[-tail:] *= np.linspace(1, 0, tail)[:, None]
     return seg
 
 
@@ -134,7 +138,16 @@ def build_q15(src, mono, normalize=True):
     t = np.linspace(0, np.pi / 2, n)[:, None]
     room = src[room_a:room_a + n]
     buf[b_end_idx - n:b_end_idx] = buf[b_end_idx - n:b_end_idx] * np.cos(t) + room * np.sin(t)
-    buf = buf[:b_end_idx + int(0.15 * SR)]
+    # Continue that SAME room window into the final fade, not a zero-filled
+    # pad. Otherwise the 80 ms file-end fade operates on silence, leaving
+    # an exposed -31 dBFS discontinuity at b_end_idx.
+    room_tail = int(0.15 * SR)
+    buf[b_end_idx:b_end_idx + room_tail] = src[room_a + n:room_a + n + room_tail]
+    buf = buf[:b_end_idx + room_tail]
+    # The raw version is also inserted into q45: taper before its own end,
+    # rather than relying on q45's later file-end fade over extra padding.
+    nf = int(FADE_OUT_S * SR)
+    buf[-nf:] *= np.linspace(1, 0, nf)[:, None]
     # Keep the insert at source level until the WHOLE q45 phrase is mixed.
     return (finalize(buf) if normalize else buf), positions
 
@@ -147,7 +160,7 @@ def build_q45(src, mono, q15_buf):
     q15_at = g_at45 - q15_lead
     total = int((q15_at + len(q15_buf) / SR + 0.05) * SR)
     buf = np.zeros((total, 2))
-    base = src[int(Q45_BASE[0] * SR): int(Q45_BASE[0] * SR) + int((g_at45 + 0.40) * SR)]
+    base = slice_seg(src, Q45_BASE[0], Q45_BASE[1], pre_fade_ms=0)
     buf[:len(base)] += base
     i0 = int(q15_at * SR)
     buf[i0:i0 + len(q15_buf)] += q15_buf[:min(len(q15_buf), total - i0)]

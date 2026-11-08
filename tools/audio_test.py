@@ -143,7 +143,7 @@ class AudioTests(unittest.TestCase):
         reference = self.source[int(1.498 * self.sr):int(1.698 * self.sr)]
         self.assertGreater(corr(isolated, reference), .96, 'joined G# source attack must survive the mix')
         src_flux = band_flux_new_energy(self.source, self.sr, 1.41, FING)
-        self.assertEqual(max(src_flux, key=src_flux.get), 'G#')
+        self.assertEqual(max(src_flux, key=lambda name: src_flux[name]), 'G#')
         # The remaining newly struck bells dominate their own fingerprint band.
         for note, at in [('F#', Q45_JOIN + recipe.STEPS[0]),
                          ('E', Q45_JOIN + recipe.STEPS[0] + recipe.STEPS[1]),
@@ -191,6 +191,26 @@ class AudioTests(unittest.TestCase):
             joined_gain = gain(6.558 + 1.38, .42, .30)
             mismatch = abs(20 * np.log10(joined_gain / base_gain))
             self.assertLess(mismatch, 1.0, f'{ext}: q45 gain changes {mismatch:.2f} dB at change 1')
+
+    def test_room_tone_does_not_drop_into_silent_padding(self):
+        # These are the actual end-of-dissolve seams, NOT the last 120 samples
+        # (those samples were already zero and falsely passed the old check).
+        for name, at in [('q15', 3.291854), ('q45', 9.849854)]:
+            for ext in ['m4a', 'ogg']:
+                x = decode(ROOT / 'audio' / f'{name}.{ext}').mean(1)
+                i, w = int(at * self.sr), int(.02 * self.sr)
+                pre = np.sqrt(np.mean(x[i-w:i] ** 2))
+                post = np.sqrt(np.mean(x[i:i+w] ** 2))
+                drop = 20 * np.log10(max(pre, 1e-12) / max(post, 1e-12))
+                self.assertLess(drop, 8, f'{name}.{ext}: room-tone seam cliffs {drop:.1f} dB')
+
+    def test_source_slice_ends_fade_both_channels_not_only_the_channel_mean(self):
+        stereo = recipe.decode_stereo(SOURCE)
+        for start, end, _ in recipe.Q15_SLICES:
+            cut = recipe.zc_time(stereo.mean(1), end)
+            segment = recipe.slice_seg(stereo, start, cut)
+            self.assertLess(float(abs(segment[-1]).max()), 1e-8,
+                            'a mono zero crossing is not a stereo de-click fade')
 
     def test_source_strike_interval(self):
         x = signal.resample_poly(self.source, 1, 6)
