@@ -104,6 +104,25 @@ test('STOP also invalidates a pending NotAllowedError playback retry', async () 
   assert.equal(h.audio.every(p => p.paused), true);
 });
 
+test('first automatic quarter waits for its gesture unlock before scheduling', async () => {
+  const h = harness();
+  h.app.setClockOffset(new Date(2026,10,8,14,15,10).getTime()-Date.now());
+  h.element('btn-quarter').fire('click');
+  assert.equal(h.timers.size, 0, 'the auto button must also wait for priming');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 4);
+});
+
+test('automatic marks before any gesture are consumed without false playback', () => {
+  const h = harness();
+  h.app.setQuarterOn(true);
+  h.app.setClockOffset(new Date(2026,10,8,14,15,10).getTime()-Date.now());
+  h.app.scheduler.tick();
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.log.filter(e => e.type === 'play').length, 0);
+});
+
 test('the playQuarter test hook actually starts the requested quarter', async () => {
   const h = harness();
   h.app.playQuarter(1);

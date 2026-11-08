@@ -204,7 +204,10 @@
   var scheduler = C.createQuarterScheduler(function () {
     return new Date(Date.now() + clockOffsetMs);
   }, function (d, q) {
-    playEvents(C.quarterEvents(q, d.getHours()));
+    // A restored toggle cannot bypass browser gesture policy. A first auto
+    // tap may still be priming: share that promise and the STOP generation.
+    if (!unlocked && !unlockPromise) return;
+    userPlay(function () { return C.quarterEvents(q, d.getHours()); })();
   });
 
   // ---------- UI ----------
@@ -283,10 +286,10 @@
 
   $btnQuarter.addEventListener('click', function () {
     quarterOn = !quarterOn;
+    if (quarterOn) unlock(); // start priming before an immediate in-grace fire
     scheduler.setEnabled(quarterOn); // clearing a stale mark keeps state honest
     renderQuarter();
     saveState();
-    if (quarterOn) unlock(); // pre-unlock so the next mark can sound unattended
   });
 
   // STOP: silence everything now, kill all pending timers (the auto toggle

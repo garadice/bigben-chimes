@@ -126,6 +126,8 @@ count = `(hour % 12) || 12`, so midnight/noon both strike twelve times.
   `setEnabledQuiet` to consume the current mark without a relaunch blast.
 - Saved ON state re-arms on boot; audio still needs a fresh real gesture
   after a browser restart. Browser autoplay policy cannot be persisted.
+- Automatic marks before that first gesture are consumed quietly; enabling
+  auto as the first interaction waits for priming before it schedules audio.
 - Timers are not an alarm-clock guarantee: Android can suspend background
   tabs or locked-screen PWAs. Keep the app open/foreground for reliable use.
 - STOP invalidates timers, pending unlock continuations and pending retries,
