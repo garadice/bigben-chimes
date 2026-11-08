@@ -13,6 +13,11 @@ function harness() {
   const timers = new Map();
   const log = [];
   let timerId = 0;
+  let clock = Date.now();
+  class ClockDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [clock])); }
+    static now() { return clock; }
+  }
   function element(id) {
     if (elements.has(id)) return elements.get(id);
     const classes = new Set();
@@ -46,7 +51,7 @@ function harness() {
       createElement: () => ({canPlayType: () => 'probably'}),
       addEventListener: (...args) => element('document').addEventListener(...args)
     },
-    Audio, navigator: {}, location: {protocol: 'http:', hostname: '127.0.0.1'},
+    Audio, Date: ClockDate, navigator: {}, location: {protocol: 'http:', hostname: '127.0.0.1'},
     localStorage: {getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value)},
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, {fn, ms}); return id; },
     clearTimeout(id) { timers.delete(id); }, setInterval() {}, console
@@ -56,6 +61,7 @@ function harness() {
   for (const file of ['chime.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {filename:file});
   return {
     app: context.__BBC__, element, audio, timers, log,
+    advance(ms) { clock += ms; },
     resolveAudio() { for (const p of audio) for (const item of p.pending.splice(0)) item.resolve(); },
     rejectAudio(name) { for (const p of audio) for (const item of p.pending.splice(0)) item.reject({name}); },
     async settle() { for (let i=0; i<12; i++) await Promise.resolve(); },
@@ -96,6 +102,15 @@ test('STOP also invalidates a pending NotAllowedError playback retry', async () 
   assert.equal(h.log.filter(e => e.type === 'play' && !e.muted).length, 1,
     'only the original failed attempt, never a retry after STOP');
   assert.equal(h.audio.every(p => p.paused), true);
+});
+
+test('a long-suspended timeline never dumps stale strikes on resume', () => {
+  const h = harness();
+  h.app.playEvents([{file:'bong',at:0,n:1},{file:'bong',at:4.015,n:2}]);
+  h.advance(60000);
+  h.runTimers();
+  assert.equal(h.log.filter(e => e.type === 'play').length, 0);
+  assert.equal(h.timers.size, 0);
 });
 
 test('failed audio priming is not reported as unlocked and can retry', async () => {

@@ -130,6 +130,9 @@ count = `(hour % 12) || 12`, so midnight/noon both strike twelve times.
   tabs or locked-screen PWAs. Keep the app open/foreground for reliable use.
 - STOP invalidates timers, pending unlock continuations and pending retries,
   pauses every player, and removes count/sway. It does not disable auto mode.
+- A timeline event more than 1 s late cancels that old tune, so resuming a
+  suspended tab cannot dump queued strikes/notes together. This is distinct
+  from the scheduler's 90 s grace for starting a new quarter sequence.
 - Mute/volume/auto persist in local storage; unavailable storage is non-fatal.
 - Reduced motion disables tower animation; vibration is optional/unsupported
   on some devices. Neither unsupported vibration nor private storage breaks audio.

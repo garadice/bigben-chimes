@@ -13,6 +13,7 @@
 
   var NOTE_FILES = ['n-gs4', 'n-fs4', 'n-e4', 'n-b3'];
   var BONG_POOL_SIZE = 4;    // overlapping decays need more than one player
+  var MAX_EVENT_LATE_MS = 1000; // suspended tabs must not dump queued notes at once
 
   // ---------- audio pool ----------
   /** Pick the best playable encoding: AAC first, Vorbis fallback. */
@@ -174,6 +175,10 @@
       var delayMs = Math.max(0, ev.at * 1000 - (Date.now() - t0));
       seqTimers.push(setTimeout(function () {
         if (gen !== seqGen) return; // superseded by a newer tap
+        if (Date.now() - t0 - ev.at * 1000 > MAX_EVENT_LATE_MS) {
+          cancelAll(); // resumed after a long freeze: discard the entire old tune
+          return;
+        }
         playOne(ev.file);
         if (ev.file === 'bong') onBongFeedback(ev.n);
       }, delayMs));
