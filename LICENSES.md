@@ -7,8 +7,9 @@ attribution legally, but we credit it anyway; CC BY material requires the
 attribution shown here and in the app footer.
 
 All audio assets are cut from ONE public-domain source recording (details
-below); every cut re-encodes to AAC 160 kbps `.m4a` + Vorbis q6 `.ogg`,
-peak-normalised to −1.5 dBFS, with short de-click fades.
+below); each cut has AAC 160 kbps `.m4a` + Vorbis q6 `.ogg` encodings and short
+de-click fades. Recut quarter assets target −3 dBFS for headroom; the retained
+hour-strike asset targets −1.5 dBFS.
 
 ## Source recording (all `audio/*` files)
 
@@ -27,21 +28,24 @@ peak-normalised to −1.5 dBFS, with short de-click fades.
 
 | file | content | source range |
 |---|---|---|
-| `melody.*` | recorded pre-strike chime = **changes 4+5** of the hour change + tonic ring-out, 17.67 s (v1 asset, unchanged) | 3.38–21.05 s |
-| `q45a.*` | the same recorded changes 4+5, trimmed before the ring-out (the :45 base), 12.20 s | 3.30–15.50 s |
-| `n-gs4.*` | single **G#4** quarter-bell slice, 1.30 s | 12.72–14.02 s |
-| `n-fs4.*` | single **F#4** quarter-bell slice, 1.15 s | 2.30–3.45 s |
-| `n-e4.*` | single **E4** quarter-bell slice, 1.41 s | 14.05–15.45 s |
-| `n-b3.*` | single **B3** quarter-bell slice, 1.51 s | 9.55–11.05 s |
-| `bong.*` | ONE hour strike + natural decay, 3.43 s (v1's cut contained the first 0.10 s of the NEXT strike — fixed) | 41.47–44.90 s |
+| `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | 0.25–21.05 s |
+| `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | 0.25–7.48 s |
+| `q45a.*` | recorded changes 4+5, 8 notes and complete final minim, 6.55 s | 7.50–14.05 s |
+| `n-gs4.*` | single **G#4** attack and decay, 0.87 s | 1.31–2.18 s |
+| `n-fs4.*` | single **F#4** attack, ends before the next B attack, 0.70 s | 2.17–2.87 s |
+| `n-e4.*` | single **E4** attack and decay, 1.06 s | 0.25–1.31 s |
+| `n-b3.*` | single **B3** attack and minim decay, 1.50 s | 2.86–4.36 s |
+| `bong.*` | ONE hour strike + natural decay, 3.43 s | 41.47–44.90 s |
 
-**Correction vs v1:** v1 described `melody.*` as "the full Westminster
-Quarters sequence". Detailed pitch mapping of the source (see `docs/DEV.md`)
-shows the file catches the broadcast chime already in progress: it contains
-changes 4 and 5 of the hour change (8 of the 16 notes), ending on the tonic
-E. The audio was always genuine; only the description was wrong. The
-remaining changes are assembled in-app from the four bell slices at the
-recording's own rhythm — all from the same PD source, nothing synthesised.
+**Cross-model review correction:** the original WAV contains all 16 notes.
+The initial v1.1 slicing map confused sustained overtones with fresh bell
+attacks and wrongly claimed that changes 2+3 were absent. The corrected hour
+asset preserves all four changes; half past preserves the first two;
+quarter to preserves the last two and appends change 1 assembled from real
+single-attack slices. Quarter past uses those same four slices. All audio
+still comes from this one PD recording, nothing synthesized. Reproduction
+and decoded-waveform provenance checks are in `tools/cut_audio.py`,
+`tools/audio_test.py`, and `docs/DEV.md`.
 
 ## Photo — `photo/bigben.jpg`
 

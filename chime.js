@@ -1,9 +1,9 @@
 /* Big Ben Chimes — pure chime logic (no DOM, node-testable).
  *
  * Sound model v1.1 (see docs/DEV.md for the evidence behind every number):
- *   audio/melody.m4a — recorded pre-strike chime (changes 4+5 of the hour
- *                      change), 17.67 s, real Big Ben broadcast, New Year 1945.
- *   audio/q45a.m4a   — same recorded phrases, trimmed to 12.20 s (the :45 base).
+ *   audio/melody.m4a — complete recorded 16-note hour chime, 20.80 s.
+ *   audio/q30.m4a    — recorded changes 2+3 (8 notes), 7.23 s.
+ *   audio/q45a.m4a   — recorded changes 4+5 (8 notes), 6.55 s.
  *   audio/n-*.m4a    — four single-bell slices (G#4, F#4, E4, B3) cut from the
  *                      same recording; used to assemble the per-quarter phrases.
  *   audio/bong.m4a   — one hour strike + natural decay, 3.43 s.
@@ -23,12 +23,12 @@
   'use strict';
 
   /* ---- evidence-derived constants (docs/DEV.md) ---- */
-  var BONG_GAP = 3.99;      // measured strike-to-strike spacing in the 1945 WAV
+  var BONG_GAP = 4.015;     // mean of 11 independently measured strike intervals
   var STRIKE_PAUSE = 0.6;   // melody asset end -> first strike (kid-friendly)
-  var MELODY_DUR = 17.67;   // audio/melody.m4a
-  var Q45A_DUR = 12.20;     // audio/q45a.m4a
-  var NOTE_STEP = 1.5;      // crotchet spacing measured in the recording
-  var MINIM_STEP = 1.7;     // minim slot -> next phrase (measured)
+  var MELODY_DUR = 20.80;   // audio/melody.m4a
+  var Q45A_DUR = 6.55;      // audio/q45a.m4a
+  var NOTE_STEP = 0.7;      // typical adjacent hammer attacks (not overtone peaks)
+  var MINIM_STEP = 1.4;     // twice the crotchet slot
 
   /** Real Westminster convention: 0:00 and 12:00 both strike 12 times. */
   function bongsForHour(hour) {
@@ -63,20 +63,6 @@
     ];
   }
 
-  /* Changes 2+3 (E4 G#4 F#4 B3 / E4 F#4 G#4 E4) — assembled the same way;
-   * this is also the opening of the full-hour change. */
-  function changes23Events(t0) {
-    return [
-      { file: E4, at: t0 },
-      { file: GS4, at: t0 + NOTE_STEP },
-      { file: FS4, at: t0 + 2 * NOTE_STEP },
-      { file: B3, at: t0 + 3 * NOTE_STEP },
-      { file: E4, at: t0 + 3 * NOTE_STEP + MINIM_STEP },
-      { file: FS4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + NOTE_STEP },
-      { file: GS4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + 2 * NOTE_STEP },
-      { file: E4, at: t0 + 3 * NOTE_STEP + MINIM_STEP + 3 * NOTE_STEP }
-    ];
-  }
 
   /**
    * Timeline for quarter mark q (0=:00 … 3=:45) at wall-clock `hour`.
@@ -96,20 +82,17 @@
     if (q === 1) {
       events = change1Events(0);
     } else if (q === 2) {
-      events = changes23Events(0);
+      events = [{ file: 'q30', at: 0 }];
     } else if (q === 3) {
       // recorded changes 4+5 (q45a), then assembled change 1 — ends on the
       // dominant B3 the way the real :45 chime does.
       events = [{ file: 'q45a', at: 0 }].concat(change1Events(q45aDur));
     } else {
-      // full hour: assembled changes 2+3, then the recorded changes 4+5
-      // (melody.m4a), then N strikes of the Great Bell.
-      events = changes23Events(0);
-      var melodyAt = 6 * NOTE_STEP + 2 * MINIM_STEP; // changes 2+3 end at
-      // 6*NOTE_STEP + MINIM_STEP = 10.7 s; leave one more minim slot of ring.
-      events.push({ file: 'melody', at: melodyAt });
+      // The original source already contains ALL 16 notes. Keep its attacks
+      // and natural decays intact rather than adding/repeating other phrases.
+      events = [{ file: 'melody', at: 0 }];
       var n = bongsForHour(hour);
-      var firstBong = melodyAt + melodyDur + strikePause;
+      var firstBong = melodyDur + strikePause;
       for (var i = 0; i < n; i++) {
         events.push({ file: 'bong', at: firstBong + i * bongGap, n: i + 1 });
       }

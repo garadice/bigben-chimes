@@ -21,6 +21,8 @@ const ASSETS = [
   'audio/bong.ogg',
   'audio/q45a.m4a',
   'audio/q45a.ogg',
+  'audio/q30.m4a',
+  'audio/q30.ogg',
   'audio/n-gs4.m4a',
   'audio/n-gs4.ogg',
   'audio/n-fs4.m4a',

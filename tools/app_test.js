@@ -79,10 +79,9 @@ test('only the newest tap survives a shared pending audio unlock', async () => {
   h.element('btn-q2').fire('click');
   h.resolveAudio();
   await h.settle();
-  assert.equal(h.timers.size, 8);
+  assert.equal(h.timers.size, 1);
   h.runTimers();
-  assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src),
-    ['n-e4','n-gs4','n-fs4','n-b3','n-e4','n-fs4','n-gs4','n-e4'].map(f => 'audio/' + f + '.m4a'));
+  assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src), ['audio/q30.m4a']);
 });
 
 test('STOP also invalidates a pending NotAllowedError playback retry', async () => {

@@ -31,6 +31,7 @@
 
   var players = {
     melody: makePlayer('melody'),
+    q30: makePlayer('q30'),
     q45a: makePlayer('q45a'),
     notes: {},
     bongs: []
@@ -49,6 +50,7 @@
 
   function applyVolume() {
     players.melody.volume = muted ? 0 : volume;
+    players.q30.volume = muted ? 0 : volume;
     players.q45a.volume = muted ? 0 : volume;
     NOTE_FILES.forEach(function (f) { players.notes[f].volume = muted ? 0 : volume; });
     players.bongs.forEach(function (p) { p.volume = muted ? 0 : volume; });
@@ -61,7 +63,7 @@
   function unlock() {
     if (unlocked) return Promise.resolve();
     if (unlockPromise) return unlockPromise;
-    var all = [players.melody, players.q45a].concat(
+    var all = [players.melody, players.q30, players.q45a].concat(
       NOTE_FILES.map(function (f) { return players.notes[f]; }),
       players.bongs);
     unlockPromise = Promise.all(all.map(function (p) {
@@ -113,7 +115,7 @@
   }
 
   function stopAllPlayers() {
-    var all = [players.melody, players.q45a].concat(
+    var all = [players.melody, players.q30, players.q45a].concat(
       NOTE_FILES.map(function (f) { return players.notes[f]; }), players.bongs);
     all.forEach(function (p) {
       try {
@@ -125,6 +127,7 @@
 
   function playerFor(file) {
     if (file === 'melody') return players.melody;
+    if (file === 'q30') return players.q30;
     if (file === 'q45a') return players.q45a;
     if (file === 'bong') {
       var el = players.bongs[bongCursor % players.bongs.length];
