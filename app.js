@@ -4,7 +4,7 @@
  *
  * Test hooks (mirrors the london-boom __TEST__ pattern):
  *   window.__BBC__.playEvents / cancelAll / players / scheduler /
- *   setClockOffset / playQuarter / stats / playSpy
+ *   setClockOffset / playQuarter / stats
  */
 (function () {
   'use strict';
@@ -343,7 +343,7 @@
     unlock: unlock,
     playQuarter: function (q) { return userPlay(function () {
       return C.quarterEvents(q, currentHour());
-    }); },
+    })(); },
     isUnlocked: function () { return unlocked; },
     playErrors: function () { return playErrors.slice(); },
     setClockOffset: function (ms) { clockOffsetMs = ms; renderClock(); },

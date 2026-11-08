@@ -104,6 +104,14 @@ test('STOP also invalidates a pending NotAllowedError playback retry', async () 
   assert.equal(h.audio.every(p => p.paused), true);
 });
 
+test('the playQuarter test hook actually starts the requested quarter', async () => {
+  const h = harness();
+  h.app.playQuarter(1);
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 4);
+});
+
 test('a long-suspended timeline never dumps stale strikes on resume', () => {
   const h = harness();
   h.app.playEvents([{file:'bong',at:0,n:1},{file:'bong',at:4.015,n:2}]);
