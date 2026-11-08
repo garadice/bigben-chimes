@@ -29,7 +29,7 @@ const errors=[];
 function check(condition,name,detail){checks.push({name,pass:!!condition,detail});if(!condition)errors.push({name,detail});}
 async function census(page,label){
  const inventory=await page.locator('button,input,a,select,textarea,[role=button],summary').evaluateAll(nodes=>nodes.filter(e=>{
-  const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}).map(e=>({selector:'#'+e.id,label:e.getAttribute('aria-label')||e.textContent,tag:e.tagName,disabled:e.disabled||false,rect:e.getBoundingClientRect().toJSON()})));
+  const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.closest('[inert]');}).map(e=>{const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {selector:'#'+e.id,label:e.getAttribute('aria-label')||e.textContent,tag:e.tagName,disabled:e.disabled||false,reachable:hit===e||e.contains(hit),rect:r.toJSON()};}));
  controls.push({screen:label,count:inventory.length,controls:inventory});return inventory;
 }
 async function dragVolume(page,context,to){
@@ -66,21 +66,35 @@ async function pickerGeometry(page,label,width,height){
  const photoVisible=await page.evaluate(()=>{const p=document.querySelector('.tower');return p.naturalWidth>0;});
  check(photoVisible,label+' photo stays loaded behind the overlay');
  const inventory=await census(page,label+' picker');
- for(const item of inventory){const r=item.rect;check(r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' picker bounds '+item.selector,r);}
+ for(const item of inventory){const r=item.rect;check(item.reachable&&r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' picker bounds and hit target '+item.selector,r);}
  await page.screenshot({path:path.join(OUT,'picker-'+label+'.png')});
+ const before=await page.evaluate(()=>__BBC__.stats().gen);
+ const playBox=await page.locator('#picker-play').boundingBox();
+ await page.touchscreen.tap(playBox.x+playBox.width/2,playBox.y+playBox.height/2);
+ check(await page.evaluate(g=>__BBC__.stats().gen===g,before),label+' unchosen PLAY remains silent');
+ for(const item of inventory.filter(e=>/^#btn-p\d+$/.test(e.selector))){
+  await page.locator(item.selector).tap();
+  const n=Number(item.selector.replace('#btn-p',''));
+  check(await page.evaluate(n=>__BBC__.pickerState().hour===n,n),label+' selects '+n);
+ }
+ await page.locator('#picker-play').tap();await page.waitForTimeout(50);
+ check(await page.evaluate(()=>!__BBC__.pickerState().open&&__BBC__.pickerState().hour===null),label+' PLAY consumes chosen number');
+ await page.locator('#btn-stop').tap();await page.locator('#btn-picker').tap();
  await page.locator('#picker-close').tap();
  check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker close button closes');
  // the overlay covers the pad while open (modal by design): reopen and close again
  await page.locator('#btn-picker').tap();
  check(await page.evaluate(()=>__BBC__.pickerState().open===true),label+' picker square reopens');
- await page.locator('#picker-close').tap();
- check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker closes again via the close button');
+ await page.locator('#picker-stop').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker closes via its reachable STOP');
+ await page.locator('#btn-clock').tap();await page.locator('#picker-close').tap();
 }
 async function geometry(page,context){
  for(const [width,height] of [[390,844],[375,812],[1280,800],[844,390],[568,320],[320,568]]){
   await page.setViewportSize({width,height});const label=width+'x'+height;
+  await page.evaluate(()=>{window.__operated=[];});
   const inventory=await census(page,label);
-  for(const item of inventory){const r=item.rect;check(r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' bounds '+item.selector,r);}
+  for(const item of inventory){const r=item.rect;check(item.reachable&&r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' bounds and hit target '+item.selector,r);}
   const photo=await page.locator('.tower').evaluate(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);const k=s.objectFit==='cover'?Math.max(r.width/e.naturalWidth,r.height/e.naturalHeight):Math.min(r.width/e.naturalWidth,r.height/e.naturalHeight);return {verticalFraction:Math.min(1,r.height/(e.naturalHeight*k)),fit:s.objectFit};});
   check(photo.verticalFraction>.98,label+' whole tower vertical frame',photo);
   const credit=await page.locator('.credit').evaluate(e=>({text:e.textContent,clipped:e.scrollWidth>e.clientWidth||e.scrollHeight>e.clientHeight,rect:e.getBoundingClientRect().toJSON()}));
@@ -88,9 +102,14 @@ async function geometry(page,context){
   if(width===390||width>height)await page.screenshot({path:path.join(OUT,'layout-'+label+'.png')});
   await operateSurface(page,context,label);
   await pickerGeometry(page,label,width,height);
+  const operated=await page.evaluate(()=>__operated);
+  const full=controls.filter(s=>s.screen===label||s.screen===label+' picker').flatMap(s=>s.controls);
+  check(full.every(e=>operated.includes(e.selector)),label+' every inventoried control operated',{missing:full.filter(e=>!operated.includes(e.selector)).map(e=>e.selector),count:full.length});
  }
 }
 const INIT=()=>{
+ window.__operated=[];
+ for(const name of ['click','input'])document.addEventListener(name,event=>{const e=event.target.closest('button,input,a,select,textarea,[role=button],summary');if(e&&e.id)window.__operated.push('#'+e.id);},true);
  window.__audioLog=[];window.__vibration=[];
  navigator.vibrate=value=>{window.__vibration.push(value);return true;};
  const play=HTMLMediaElement.prototype.play;
@@ -104,7 +123,7 @@ const INIT=()=>{
 };
 async function shift(page,h,m,s=1){await page.evaluate(([h,m,s])=>__BBC__.setClockOffset(new Date(2026,10,8,h,m,s).getTime()-Date.now()),[h,m,s]);}
 async function resetLog(page){await page.locator('#btn-stop').tap();await page.evaluate(()=>{__audioLog.length=0;__vibration.length=0;});}
-async function waitPlays(page,n){await page.waitForFunction(n=>__audioLog.filter(e=>e.status==='playing').length>=n,n,{timeout:40000});}
+async function waitPlays(page,n){await page.waitForFunction(n=>__audioLog.filter(e=>e.status==='playing').length>=n,n,{timeout:90000});}
 async function files(page){return page.evaluate(()=>__audioLog.filter(e=>e.status==='playing').map(e=>e.file));}
 async function playback(page){
  await page.setViewportSize({width:390,height:844});await shift(page,13,7);
@@ -118,7 +137,7 @@ async function playback(page){
  check(JSON.stringify(await files(page))===JSON.stringify(['q45']),':45 is one joined asset');
  await resetLog(page);await page.locator('#btn-q4').tap();await waitPlays(page,1);await page.waitForTimeout(220);
  check(JSON.stringify(await files(page))===JSON.stringify(['melody']),':00 button = melody ONLY');
- await page.waitForTimeout(1300);
+ await page.waitForTimeout(21500);
  check((await files(page)).length===1,'no bong ever arrives from the :00 button');
  await shift(page,15,7);await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,3);
  const bongs=await page.evaluate(()=>__audioLog.filter(e=>e.file==='bong'&&e.status==='playing'));
@@ -140,26 +159,30 @@ async function pickerPlayback(page){
  await resetLog(page);
  await page.locator('#clock').tap();
  check(await page.evaluate(()=>__BBC__.pickerState().open),'tapping the clock opens the picker');
- await page.locator('#btn-p2').tap();
- check(await page.evaluate(()=>__BBC__.pickerState().hour===2),'chosen hour 2 is armed');
- check((await page.locator('#picker-play').textContent()).includes('2'),'play button shows the chosen hour');
+ await page.locator('#btn-p12').tap();
+ check(await page.evaluate(()=>__BBC__.pickerState().hour===12),'chosen hour 12 is armed');
+ check((await page.locator('#picker-play').textContent()).includes('12'),'play button shows the chosen hour');
  await page.locator('#picker-play').tap();
  check(await page.evaluate(()=>__BBC__.pickerState().open===false),'overlay closes after use');
  check(await page.evaluate(()=>__BBC__.pickerState().hour===null),'choice is consumed');
- await waitPlays(page,3);
+ await waitPlays(page,13);
  const log=await page.evaluate(()=>__audioLog.filter(e=>e.status==='playing'));
- check(JSON.stringify(log.map(e=>e.file))===JSON.stringify(['melody','bong','bong']),
-   'picker 2 = melody then EXACTLY two bongs');
- const bongGap=log.length===3?(log[2].at-log[1].at)/1000:null;
- check(Math.abs(bongGap-4.015)<.15,'picker bong spacing = measured 4.015 s',{bongGap});
- check(await page.locator('#armed').textContent()==='🔔 2','armed badge shows the chosen hour');
+ check(JSON.stringify(log.map(e=>e.file))===JSON.stringify(['melody',...Array(12).fill('bong')]),
+   'picker 12 = melody then EXACTLY twelve real bongs');
+ for(let i=2;i<log.length;i++)check(Math.abs((log[i].at-log[i-1].at)/1000-4.015)<.15,'picker real bong spacing '+(i-1),log[i].at-log[i-1].at);
+ check(await page.locator('#armed').textContent()==='🔔 12','armed badge shows the chosen hour');
  check(await page.locator('#armed').evaluate(e=>e.classList.contains('show')),'armed badge is visible while playing');
- check(await page.evaluate(()=>__vibration.length===2),'picker strikes vibrate like real bongs');
+ check(await page.evaluate(()=>__vibration.length===12),'picker strikes vibrate like real bongs');
+ await page.waitForTimeout(1500);
+ check(await page.locator('#armed').evaluate(e=>e.classList.contains('show')),'badge survives first 1.5 seconds of the final real strike');
+ await page.waitForTimeout(2800);
+ check(await page.locator('#armed').evaluate(e=>!e.classList.contains('show')),'badge clears after the final decay');
+ check((await files(page)).length===13,'no hidden thirteenth strike after picker 12');
  await page.locator('#btn-stop').tap();await page.waitForTimeout(300);
  check(await page.evaluate(()=>__BBC__.pickerState().open===false),'STOP closes the picker');
  check(await page.locator('#armed').evaluate(e=>!e.classList.contains('show')),'STOP clears the armed badge');
  const still=await page.evaluate(()=>__audioLog.filter(e=>e.status==='playing').length);
- check(still===3,'STOP prevented the remaining strikes (only the 3 already played)');
+ check(still===13,'STOP does not restart a completed picker timeline');
  check(await page.evaluate(()=>__BBC__.stats().timers===0),'STOP killed every pending picker strike');
  await page.screenshot({path:path.join(OUT,'picker-after-stop.png')});
 }
@@ -169,7 +192,11 @@ async function autoAndPersistence(page){
  for(const [h,m,file,q] of [[13,15,'q15',1],[13,30,'q30',2],[13,45,'q45',3],[14,0,'melody',0]]){
   await resetLog(page);await shift(page,h,m);await waitPlays(page,1);
   check((await files(page))[0]===file,'automatic mark '+m+' selects correct sequence');
-  if(q===0)check(await page.evaluate(()=>__BBC__.stats().timers===3),'automatic hour includes two pending strikes at 14:00');
+  if(q===0){
+   check(await page.evaluate(()=>__BBC__.stats().timers===3),'automatic hour includes two pending strikes at 14:00');
+   await waitPlays(page,3);await page.waitForTimeout(4200);
+   check(JSON.stringify(await files(page))===JSON.stringify(['melody','bong','bong']),'automatic hour really plays the clock count, not the last picker choice');
+  }
  }
  await resetLog(page);await shift(page,14,33);await page.waitForTimeout(1100);check((await files(page)).length===0,'stale automatic quarter is not played');
  await page.locator('#btn-mute').tap();
@@ -205,6 +232,7 @@ async function offlineUpgrade(browser,base){
  await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
  check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),'upgraded app and real audio work offline');
  check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'offline :15 uses the new assembled asset');
+ await offlineAssets(page,'AAC');
  const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.0'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
@@ -224,6 +252,8 @@ async function pickerModalInteraction(page){
  await page.locator('#picker-stop').tap({timeout:2000});
  check(await page.evaluate(()=>!__BBC__.pickerState().open&&__BBC__.pickerState().hour===null),'real modal STOP closes and discards choice');
  check(await page.evaluate(()=>__BBC__.players.bongs.every(p=>p.paused)&&__BBC__.stats().timers===0),'real modal STOP pauses current chime and cancels later strikes');
+ await page.waitForTimeout(4200);
+ check((await files(page)).length===1,'no pending strike survives modal STOP');
  await page.locator('#btn-picker').tap();
  check(await page.evaluate(()=>document.activeElement.id==='picker-close'),'picker receives keyboard focus');
  await page.keyboard.press('Shift+Tab');
@@ -236,16 +266,53 @@ async function pickerModalInteraction(page){
  check(await page.evaluate(()=>__BBC__.pickerState().open),'clock works as a keyboard control');
  await page.keyboard.press('Escape');
 }
+async function coldFirstGestures(browser,base){
+ for(const target of ['btn-q1','btn-q2','btn-q3','btn-q4','btn-bongs','picker-play','stop']){
+  const c=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,serviceWorkers:'block'});
+  await c.addInitScript(INIT);
+  await c.route('**/audio/**',async route=>{await new Promise(r=>setTimeout(r,900));await route.continue();});
+  const page=await c.newPage();page.on('pageerror',e=>errors.push({name:'cold-gesture error',detail:String(e)}));
+  await page.goto(base,{waitUntil:'domcontentloaded'});await shift(page,13,7);
+  if(target==='picker-play'){await page.locator('#btn-picker').tap();await page.locator('#btn-p12').tap();}
+  await page.locator('#'+(target==='stop'?'btn-q1':target)).tap();
+  if(target==='stop'){
+   await page.locator('#btn-stop').tap();await page.waitForTimeout(1400);
+   check((await files(page)).length===0,'cold STOP cancels pending first-gesture playback');
+   await page.locator('#btn-q1').tap();
+  }
+  await waitPlays(page,1);await page.waitForTimeout(180);
+  const expected=({'btn-q1':'q15','btn-q2':'q30','btn-q3':'q45','btn-q4':'melody','btn-bongs':'bong','picker-play':'melody',stop:'q15'})[target];
+  check(JSON.stringify(await files(page))===JSON.stringify([expected]),'cold delayed-media first tap '+target+' really plays once');
+  check(await page.evaluate(()=>__BBC__.isUnlocked()),'cold delayed-media unlock completes '+target);
+  await c.close();
+ }
+}
+async function offlineAssets(page,codec){
+ await shift(page,13,7);
+ for(const [button,key]of [['btn-q1','q15'],['btn-q2','q30'],['btn-q3','q45'],['btn-q4','melody'],['btn-bongs','bongs']]){
+  await resetLog(page);await page.locator('#'+button).tap();await waitPlays(page,1);await page.waitForTimeout(220);
+  const inspect=()=>page.evaluate(key=>{const all=key==='bongs'?__BBC__.players.bongs:[__BBC__.players[key]];return {advances:all.some(p=>!p.paused&&p.currentTime>.1),players:all.map(p=>({paused:p.paused,time:p.currentTime,ready:p.readyState,error:p.error&&p.error.code})),errors:__BBC__.playErrors()};},key);
+  let state=await inspect();
+  if(!state.advances){
+   console.log('offline playback readiness sample',codec,key,state);
+   await page.waitForTimeout(1200);state=await inspect();
+  }
+  check(state.advances,codec+' actual offline decoded asset '+key+' advances',state);
+ }
+ await page.locator('#btn-stop').tap();
+}
 async function fallbackAndFile(browser,base){
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  await context.addInitScript(()=>{const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('audio/mp4')?'':original.call(this,type);};});
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
  await context.setOffline(true);await page.reload();await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
  check(await page.evaluate(()=>__BBC__.players.q15.currentSrc.endsWith('.ogg')&&__BBC__.players.q15.currentTime>.1),'real Vorbis fallback plays offline');
+ await offlineAssets(page,'Vorbis');
  await context.close();
  const local=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const file=await local.newPage();const failures=[];file.on('pageerror',e=>failures.push(String(e)));
  await file.goto('file://'+path.join(ROOT,'index.html'));
- check(await file.locator('button').count()===23&&failures.length===0,'file URL boots without service-worker errors',failures);
+ const expectedButtons=(await fs.readFile(path.join(ROOT,'index.html'),'utf8')).match(/<button\b/g).length;
+ check(await file.locator('button').count()===expectedButtons&&failures.length===0,'file URL boots without service-worker errors',failures);
  await local.close();
 }
 async function main(){
@@ -265,6 +332,7 @@ async function main(){
   }else if(!process.argv.includes('--upgrade-only')){
    await playback(page);
    await pickerPlayback(page);
+   await pickerModalInteraction(page);
    await shift(page,13,7);await geometry(page,context);
    await page.setViewportSize({width:390,height:844});await autoAndPersistence(page);
   }
@@ -273,6 +341,7 @@ async function main(){
   if(!process.argv.includes('--modal-only')){
    await offlineUpgrade(browser,base);
    await firstAutoGesture(browser,base);
+   await coldFirstGestures(browser,base);
    await fallbackAndFile(browser,base);
   }
  }catch(error){

@@ -7,7 +7,7 @@ The original must match the declared Commons source hash. No downloading.
 
 v1.2.0 rebuild (card t_a03d86fe, path b — see docs/DEV.md for the evidence):
   q15 = change 1 (G#4 F#4 E4 B3) assembled OFFLINE from the recording's
-        change 2 performance (the only G#/F#/E/B material the source has),
+        change 2 performance (all four bells in one short source span),
         tails ringing under the next attack at the performance's own measured
         rhythm, phrase-final tail dissolving into real room tone.
   q45 = recorded changes 4+5 (former q45a content) + that same change 1,

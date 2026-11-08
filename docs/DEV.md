@@ -74,7 +74,7 @@ checked with license metadata:
 - MIDI files (`Westminster Quarters.mid`, `Westminster-chimes.mid`) —
   synthesized; rejected on principle (the product is REAL Big Ben).
 
-**Verdict: no usable recording exists → path (b).**
+**Verdict: this search found no usable contiguous change-1 recording → path (b).**
 
 ### Path (b) — the offline rebuild (shipped)
 
@@ -82,8 +82,8 @@ checked with license metadata:
 OFFLINE at the sample level, all from the same 1945 recording:
 
 - `q15` (3.44 s) = change 1 (G#4 F#4 E4 B3) assembled from the recording's
-  **change 2 performance** (0.35 E, 1.41 G#, 2.27 F#, 2.96 B — the only
-  G#/F#/E/B material the source contains; one 4-second span also means one
+  **change 2 performance** (0.35 E, 1.41 G#, 2.27 F#, 2.96 B — the chosen
+  all-four-bell material; one 4-second span also means one
   speed-drift state, so pitches stay mutually consistent).
 - `q45` (10.05 s) = the recorded changes 4+5 (former `q45a` window,
   7.50–14.05 s, extended so the tonic minim keeps ringing) + `q15` joined
@@ -98,9 +98,9 @@ Engineering decisions (all evidenced, documented in the code):
   broadcast-start rubato outlier). No mechanical grid.
 - **Overlap-add**: each slice keeps its full natural decay so the tail
   rings under the next attack — the defining texture of the source.
-- **Cuts at zero crossings** just before the next attack; interior cuts
-  are masked by the following attack (temporal + spectral masking, the
-  same effect that makes `q30` sound seamless).
+- **Cuts at zero crossings** just before the next attack, with an 80 ms
+  outgoing fade in BOTH stereo channels while the next note rings. A zero
+  crossing of the channel mean is not necessarily zero in either channel.
 - **Phrase-initial G# keeps only 12 ms of lead-in** (zero-crossing +
   3 ms fade): a longer lead-in would leak the E-bell tail (≈ −9 dB after
   phrase gain) into the start of :15.
@@ -108,30 +108,38 @@ Engineering decisions (all evidenced, documented in the code):
   −22.6 dBFS after 1.4 s — bells decay slowly). It dissolves into the
   hall's real room tone (quietest 1 s window of the ring-out region,
   19.95 s, −38.6 dBFS) via a 450 ms equal-power crossfade: the decay
-  continues naturally into the noise floor instead of cliffing.
-- **One phrase-level gain** to −3 dBFS peak; no per-slice normalization,
-  so natural note-loudness relationships survive. Fades: 8 ms in,
+  continues into the noise floor. The SAME room window continues for the
+  final 150 ms and fades to zero; no silent pad interrupts the dissolve.
+- **One phrase-level gain** to −3 dBFS peak; no per-slice normalization.
+  q45 mixes the UNNORMALIZED q15 assembly with its source-level base and
+  normalizes the complete result once, preserving source loudness relationships.
+  Fades: 8 ms in,
   80 ms out (same convention as every shipped asset).
 
 ### Verification numbers (2026-11-08)
 
-`tools/audio_test.py` (12 cases, all green) adds to the v1.1.0 contracts:
+`tools/audio_test.py` (15 cases) adds to the v1.1.0 contracts:
 
-- Provenance: assembled assets correlate ≥ 0.98 with the recipe built from
-  the hash-verified source (q15 0.9822 m4a; q45 base segment 0.9996).
+- Provenance: q15's four individual note windows correlate ≥ 0.994 with
+  the hash-verified source in both codecs; q45's base correlates 0.9996.
+  The first joined G# correlates ≥ 0.999 after subtracting the ringing base.
 - Pitch classes per note via the DEV.md fingerprint bands (E≈1051,
-  G#≈900, F#≈1197, B≈1393 Hz NEW band energy): all 4 notes of the joined
-  q45 phrase and 3 of 4 q15 notes fingerprint correctly in-asset; the
-  phrase-initial G# is verified at source level (its in-asset reference
-  window would be the asset start's near-silence) and tied to the asset by
-  provenance. HPS interval chain F#→E→B measures −2.17/−5.08 st (nominal
-  −2/−5). Absolute HPS pitch is NOT used: inharmonic partials make it
-  unreliable (v1.1.0 already learned this lesson).
-- Seam continuity: q45 join envelope step 0.5 dB (< 3 dB allowed).
+  G#≈900, F#≈1197, B≈1393 Hz NEW band energy). The first G# is source-pitch
+  checked and waveform-matched; for q45 subtract the known ringing base
+  before matching it. At honest source levels that E decay's B-band partial
+  can beat the new G# band: a loudest-band classifier alone is insufficient.
+  Full-spectrum comparison against a separate B attack confirms source B
+  notes at 2.96 and 10.90 s despite ambiguous single-band flux.
+- q45 source-gain regression: the initial v1.2 build boosted change 1 by
+  7.83 dB relative to its base. Corrected mix agrees within 0.05 dB.
+- Actual room-tone splice regression (q15 3.292 s; q45 9.850 s): the initial
+  build dropped ~25 dB per 20 ms into zero padding. Continued room tone
+  removes that cliff (about −2 dB measured drop, i.e. a slight rise).
 - A/B vs the "sounds right" `q30`: worst inter-attack envelope move
   q15 2.5 dB/20 ms vs q30 3.0 dB/20 ms — the assembled phrase is at least
   as smooth as the contiguous reference (contract-tested).
 
+These are waveform/provenance checks, NOT an audible phone-listen verdict.
 The per-note slice assets (`n-*`) and the `q45a` chunk are retired; the
 service worker no longer precaches them.
 
@@ -191,12 +199,16 @@ and speed fluctuation.
   1–12. Pick a number, press the big ▶ button: the full 16-note melody
   plays, then the Great Bell strikes the CHOSEN number of times at the
   measured 4.015 s spacing. Nothing else in between. While playing, a
-  badge next to the clock shows the chosen hour (`🔔 N`); it clears when
-  the timeline ends, on STOP, or when any other button takes over.
+  badge next to the clock shows the chosen hour (`🔔 N`); it clears after
+  the final strike's 3.43 s decay, on STOP, or when another button takes over.
+  Opening the overlay mid-chime leaves playback running, but its own red
+  STOP is always reachable. Keyboard focus stays inside; Escape closes it
+  and restores the opener. The clock is a real keyboard-operable button.
 - **Picker state decision**: the choice is CONSUMED on play and the
   overlay closes; the next open starts with nothing selected (a stale
   number must never strike unexpectedly). The choice is not persisted
-  across sessions. Number buttons clamp to 1–12; nothing but the picker
+  across sessions. STOP discards an unfinished choice too. Number buttons
+  clamp to 1–12; nothing but the picker
   reads the chosen hour (BONGY and auto-chime always use the real clock).
 - **Unchanged**: BONGY (current real hour, `(hour % 12) || 12`), KAŽDÚ
   ŠTVRŤ auto-chime (per-quarter sequences — now with the FIXED sounds —
@@ -236,6 +248,9 @@ count = `(hour % 12) || 12`, so midnight/noon both strike twelve times.
 - STOP invalidates timers, pending unlock continuations and pending retries,
   pauses every player, removes count/sway/armed badge, and closes the
   picker overlay. It does not disable auto mode.
+- A cold first manual tap preserves the muted pointerdown priming sweep:
+  pausing it before media loads rejects native play() promises with
+  AbortError. STOP still pauses every player and cancels the pending tap.
 - A timeline event more than 1 s late cancels that old tune, so resuming a
   suspended tab cannot dump queued strikes/notes together. This is distinct
   from the scheduler's 90 s grace for starting a new quarter sequence.
@@ -261,6 +276,12 @@ and landscape-safe. Verify offline reload, real decoded audio currentTime
 progression, cache upgrade v1.1.0 → v1.2.0 and no external requests. A
 headless play spy is NOT an audible listening test — Martin's phone listen
 is the final acceptance.
+
+The browser suite now hit-tests every inventoried control, operates all
+12 picker numbers on all six viewports, plays a full chosen 12-strike
+timeline in real time, waits past :00's potential strike time, and delays
+native media responses for cold first taps (rather than delaying a promise
+which already resolved). All five asset types play offline in AAC and Vorbis.
 
 Main owns push/deploy after independent verifier approval. This review
 makes local commits only. Re-verify the published app after any future deploy.

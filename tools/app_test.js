@@ -147,6 +147,47 @@ test('the playQuarter test hook actually starts the requested quarter', async ()
   assert.equal(h.timers.size, 1, ':15 plays one assembled asset');
 });
 
+for (let n = 1; n <= 12; n++) {
+  test(`real picker wiring schedules exactly ${n} strikes at 4.015 seconds`, async () => {
+    const h = harness();
+    h.element('btn-picker').fire('click'); h.element('btn-p' + n).fire('click');
+    h.element('picker-play').fire('click'); h.resolveAudio(); await h.settle();
+    const actual = [...h.timers.values()].map(t => +t.ms.toFixed(3)).sort((a,b) => a-b);
+    const strikes = Array.from({length:n}, (_,i) => 21400 + i * 4015);
+    assert.deepEqual(actual, [0, ...strikes, strikes.at(-1) + 3430]);
+    h.runTimers();
+    assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src),
+      ['audio/melody.m4a', ...Array(n).fill('audio/bong.m4a')]);
+  });
+}
+for (let hour = 0; hour < 24; hour++) {
+  for (const route of ['BONGY','auto']) {
+    test(`${route} wiring at real hour ${hour} ignores a stale picker choice`, async () => {
+      const h = harness();
+      h.element('btn-picker').fire('click'); h.element('btn-p7').fire('click');
+      h.element('picker-close').fire('click');
+      h.app.unlock(); h.resolveAudio(); await h.settle();
+      if (route === 'auto') {
+        h.app.setClockOffset(new Date(2026,10,8,hour,15,1).getTime()-Date.now());
+        h.app.setQuarterOn(true);
+        h.app.setClockOffset(new Date(2026,10,8,hour,0,1).getTime()-Date.now());
+        h.app.scheduler.tick();
+      } else {
+        h.app.setClockOffset(new Date(2026,10,8,hour,7,1).getTime()-Date.now());
+        h.element('btn-bongs').fire('click');
+      }
+      await h.settle();
+      const count = (hour % 12) || 12;
+      const slots = [...h.timers.values()].map(t => +t.ms.toFixed(3)).sort((a,b) => a-b);
+      const expected = Array.from({length:count}, (_,i) => (route==='auto'?21400:0) + i*4015);
+      assert.deepEqual(slots, route==='auto' ? [0,...expected] : expected);
+      h.runTimers();
+      const files=h.log.filter(e=>e.type==='play'&&!e.muted).map(e=>e.src);
+      assert.deepEqual(files, [...(route==='auto'?['audio/melody.m4a']:[]),...Array(count).fill('audio/bong.m4a')]);
+    });
+  }
+}
+
 test('the :00 button plays the melody ONLY — no strike path', async () => {
   const h = harness();
   h.element('btn-q4').fire('click');
@@ -282,6 +323,27 @@ test('tapping the clock opens the picker', () => {
   assert.equal(h.app.pickerState().open, true);
   h.element('btn-picker').fire('click'); // toggle closes it again
   assert.equal(h.app.pickerState().open, false);
+});
+
+test('STOP cancels picker PLAY while native-style priming is still pending', async () => {
+  const h = harness({abortOnPause:true});
+  h.element('document').fire('pointerdown');
+  h.element('btn-picker').fire('click'); h.element('btn-p12').fire('click');
+  h.element('picker-play').fire('click'); h.element('btn-stop').fire('click');
+  h.resolveAudio(); await h.settle(); h.runTimers();
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.element('armed').classList.contains('show'), false);
+  assert.equal(h.log.filter(e => e.type === 'play' && !e.muted).length, 0);
+});
+
+test('a newer melody-only tap supersedes a picker awaiting the shared unlock', async () => {
+  const h = harness({abortOnPause:true});
+  h.element('document').fire('pointerdown');
+  h.element('btn-picker').fire('click'); h.element('btn-p12').fire('click');
+  h.element('picker-play').fire('click'); h.element('btn-q4').fire('click');
+  h.resolveAudio(); await h.settle(); h.runTimers();
+  assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src), ['audio/melody.m4a']);
+  assert.equal(h.element('armed').classList.contains('show'), false);
 });
 
 test('STOP clears an unplayed picker choice before the next open', () => {

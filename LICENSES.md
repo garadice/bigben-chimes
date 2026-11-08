@@ -9,8 +9,8 @@ attribution shown here and in the app footer.
 All audio assets derive from ONE public-domain source recording (details
 below). Contiguous cuts have AAC 160 kbps `.m4a` + Vorbis q6 `.ogg`
 encodings and short de-click fades. The assembled quarter assets (`q15`,
-`q45`) are built offline from the same recording at natural levels and
-target −3 dBFS; the retained hour-strike asset targets −1.5 dBFS.
+`q45`) are built offline from the same recording at natural levels.
+All assets, including the hour strike, target −3 dBFS before encoding.
 
 ## Source recording (all `audio/*` files)
 
@@ -85,7 +85,7 @@ to the one PD recording. The former per-note slice assets (`n-*`) and the
   (searches, category trees, Wikipedia article media lists): every other
   audio candidate is not Big Ben (`WestminsterMetrikx3.ogg` metric
   demonstration, Vierne organ composition, a Gdańsk museum tower clock,
-  spoken audio description, MIDI files). No usable new source exists.
+  spoken audio description, MIDI files). This search found no usable new source.
 - Synthesised bell tones for the missing phrases — rejected on principle:
   the product is REAL Big Ben. The missing change is assembled from
   recorded bell material instead (see `docs/DEV.md`).
