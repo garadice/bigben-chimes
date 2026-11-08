@@ -382,6 +382,8 @@
   // STOP: silence everything now, kill all pending timers (the auto toggle
   // stays as it is — stopping sound is not switching the mode off).
   $btnStop.addEventListener('click', function () {
+    pickerHour = null;
+    renderPicker();
     closePicker();
     cancelAll();
     $btnStop.classList.remove('pressed');

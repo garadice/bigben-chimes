@@ -257,6 +257,16 @@ test('tapping the clock opens the picker', () => {
   assert.equal(h.app.pickerState().open, false);
 });
 
+test('STOP clears an unplayed picker choice before the next open', () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p7').fire('click');
+  h.element('btn-stop').fire('click');
+  h.element('btn-picker').fire('click');
+  assert.equal(h.app.pickerState().hour, null, 'STOP must discard the unfinished choice');
+  assert.equal(h.element('picker-play').textContent, '▶');
+});
+
 test('a long-suspended timeline never dumps stale strikes on resume', () => {
   const h = harness();
   h.app.playEvents([{file:'bong',at:0,n:1},{file:'bong',at:4.015,n:2}]);
