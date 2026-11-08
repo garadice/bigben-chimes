@@ -40,7 +40,11 @@ const ASSETS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () {
+    caches.open(CACHE).then(function (c) {
+      return c.addAll(ASSETS.map(function (asset) {
+        return new Request(asset, { cache: 'reload' });
+      }));
+    }).then(function () {
       return self.skipWaiting();
     })
   );
@@ -50,7 +54,7 @@ self.addEventListener('activate', function (e) {
   e.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(keys.map(function (k) {
-        if (k !== CACHE) return caches.delete(k);
+        if (k.indexOf('bigben-chimes-') === 0 && k !== CACHE) return caches.delete(k);
       }));
     }).then(function () {
       return self.clients.claim();
@@ -74,47 +78,36 @@ self.addEventListener('fetch', function (e) {
   }
 
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then(function (hit) {
-      if (hit) {
-        // serve from cache; refresh it in the background when online
-        fetch(req).then(function (resp) {
-          if (resp && resp.ok) caches.open(CACHE).then(function (c) { c.put(req, resp); });
-        }).catch(function () { /* offline: cached copy already served */ });
-        return hit;
-      }
-      return fetch(req).then(function (resp) {
-        if (resp && resp.ok) {
-          const copy = resp.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
-        return resp;
-      });
+    cachedResponse(req).then(function (hit) {
+      // A release cache is immutable. Background refresh mixed new files into
+      // old releases and made a network request on every cached page load.
+      return hit || fetch(req);
     })
   );
 });
 
+function cachedResponse(req) {
+  return caches.open(CACHE).then(function (cache) {
+    return cache.match(req, { ignoreSearch: true });
+  });
+}
+
 /* Answer a Range request from the cached full response (206 slice). */
 function rangeFromCache(req) {
-  return caches.match(req, { ignoreSearch: true }).then(function (hit) {
+  return cachedResponse(req).then(function (hit) {
     if (!hit) return fetch(req); // not cached yet: native network path
     const range = req.headers.get('range') || '';
-    const m = /bytes=(\d*)-(\d*)/.exec(range);
-    if (!m) return hit;
-    const total = Number(hit.headers.get('content-length'));
-    let start = m[1] ? Number(m[1]) : 0;
-    let end = m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
-    if (m[1] === '' && m[2] !== '') {
-      // suffix range 'bytes=-N' means the LAST N bytes (RFC 7233), not the first
-      start = Math.max(0, total - Number(m[2]));
-      end = total - 1;
-    }
-    if (isNaN(total) || start > end) {
-      return new Response(null, {
-        status: 416,
-        headers: { 'Content-Range': 'bytes */' + (isNaN(total) ? '*' : total) }
-      });
-    }
+    const m = /^bytes=(\d*)-(\d*)$/i.exec(range.trim());
+    if (!m || (!m[1] && !m[2])) return hit; // ignore malformed/multi-range
     return hit.arrayBuffer().then(function (buf) {
+      // Content-Length may be absent or describe a compressed transfer. Range
+      // offsets address the decoded cached body, not that header's byte count.
+      const total = buf.byteLength;
+      let start = m[1] ? Number(m[1]) : Math.max(0, total - Number(m[2]));
+      let end = m[1] && m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end) {
+        return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + total } });
+      }
       const slice = buf.slice(start, end + 1);
       return new Response(slice, {
         status: 206,
