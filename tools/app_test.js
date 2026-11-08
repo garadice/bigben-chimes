@@ -63,6 +63,42 @@ function harness() {
   };
 }
 
+test('STOP invalidates a button tap still waiting for audio unlock', async () => {
+  const h = harness();
+  h.element('btn-q1').fire('click');
+  h.element('btn-stop').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 0, 'pending unlock must not resurrect stopped playback');
+  assert.equal(h.audio.every(p => p.paused), true);
+});
+
+test('only the newest tap survives a shared pending audio unlock', async () => {
+  const h = harness();
+  h.element('btn-q1').fire('click');
+  h.element('btn-q2').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.timers.size, 8);
+  h.runTimers();
+  assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src),
+    ['n-e4','n-gs4','n-fs4','n-b3','n-e4','n-fs4','n-gs4','n-e4'].map(f => 'audio/' + f + '.m4a'));
+});
+
+test('STOP also invalidates a pending NotAllowedError playback retry', async () => {
+  const h = harness();
+  h.app.playEvents([{file:'bong',at:0,n:1}]);
+  h.runTimers();
+  h.rejectAudio('NotAllowedError');
+  await h.settle(); // retry is now waiting for the muted sweep
+  h.element('btn-stop').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.log.filter(e => e.type === 'play' && !e.muted).length, 1,
+    'only the original failed attempt, never a retry after STOP');
+  assert.equal(h.audio.every(p => p.paused), true);
+});
+
 test('concurrent unlock callers wait for the same in-flight audio sweep', async () => {
   const h = harness();
   let first = false;

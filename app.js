@@ -135,6 +135,7 @@
   }
 
   function playOne(file) {
+    var gen = seqGen;
     var el = playerFor(file);
     try {
       el.currentTime = 0;
@@ -143,9 +144,10 @@
     if (pr && pr.catch) {
       pr.catch(function (err) {
         playErrors.push(file + ': ' + (err && err.name || String(err)));
-        if (err && err.name === 'NotAllowedError') {
-          // no user activation yet (e.g. scripted clicks) — unlock muted, retry once
+        if (err && err.name === 'NotAllowedError' && gen === seqGen) {
+          // A gesture may unlock audio; STOP/newer taps must cancel this retry too.
           return unlock().then(function () {
+            if (gen !== seqGen) return;
             try { el.currentTime = 0; } catch (e2) { /* harmless */ }
             return el.play();
           }).catch(function (err2) {
@@ -246,8 +248,10 @@
 
   function userPlay(eventsFactory) {
     return function () {
+      cancelAll(); // invalidate older taps even while their unlock is pending
+      var gen = seqGen;
       unlock().then(function () {
-        playEvents(eventsFactory());
+        if (gen === seqGen) playEvents(eventsFactory());
       });
     };
   }
