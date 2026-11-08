@@ -31,7 +31,32 @@ async function census(page,label){
  const inventory=await page.locator('button,input,a,select,textarea,[role=button],summary').evaluateAll(nodes=>nodes.map(e=>({selector:'#'+e.id,label:e.getAttribute('aria-label')||e.textContent,tag:e.tagName,disabled:e.disabled||false,rect:e.getBoundingClientRect().toJSON()})));
  controls.push({screen:label,count:inventory.length,controls:inventory});return inventory;
 }
-async function geometry(page){
+async function dragVolume(page,context,to){
+ const box=await page.locator('#volume').boundingBox();
+ const value=Number(await page.locator('#volume').inputValue());
+ const x=box.x+13+(box.width-26)*value,y=box.y+box.height/2;
+ const end=box.x+13+(box.width-26)*to;
+ const cdp=await context.newCDPSession(page);
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+ for(let i=1;i<=12;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+(end-x)*i/12,y}]});
+ await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+ const after=Number(await page.locator('#volume').inputValue());
+ check(Math.abs(after-to)<.08,'real touch volume drag to '+to,{after});
+}
+async function operateSurface(page,context,label){
+ for(const id of ['btn-q1','btn-q2','btn-q3','btn-q4','btn-bongs']){
+  const before=await page.evaluate(()=>__BBC__.stats().gen);await page.locator('#'+id).tap();
+  await page.waitForTimeout(35);check(await page.evaluate(g=>__BBC__.stats().gen>g,before),label+' operated '+id);
+ }
+ await page.locator('#btn-stop').tap();
+ check(await page.evaluate(()=>__BBC__.stats().timers===0),label+' operated STOP');
+ await page.locator('#btn-quarter').tap();check(await page.evaluate(()=>__BBC__.scheduler.isEnabled()),label+' operated auto ON');
+ await page.locator('#btn-quarter').tap();
+ await page.locator('#btn-mute').tap();check(await page.locator('#volume').isDisabled(),label+' operated mute');
+ await page.locator('#btn-mute').tap();
+ for(const target of [.15,.85,.4])await dragVolume(page,context,target);
+}
+async function geometry(page,context){
  for(const [width,height] of [[390,844],[375,812],[1280,800],[844,390],[568,320],[320,568]]){
   await page.setViewportSize({width,height});const label=width+'x'+height;
   const inventory=await census(page,label);
@@ -41,7 +66,108 @@ async function geometry(page){
   const credit=await page.locator('.credit').evaluate(e=>({text:e.textContent,clipped:e.scrollWidth>e.clientWidth||e.scrollHeight>e.clientHeight,rect:e.getBoundingClientRect().toJSON()}));
   check(!credit.clipped&&credit.text.includes('creativecommons.org/licenses/by/2.5/'),label+' complete license attribution',credit);
   if(width===390||width>height)await page.screenshot({path:path.join(OUT,'layout-'+label+'.png')});
+  await operateSurface(page,context,label);
  }
+}
+const INIT=()=>{
+ window.__audioLog=[];window.__vibration=[];
+ navigator.vibrate=value=>{window.__vibration.push(value);return true;};
+ const play=HTMLMediaElement.prototype.play;
+ HTMLMediaElement.prototype.play=function(){
+  const event=!this.muted?{file:this.src.split('/').pop().replace(/\.(m4a|ogg)$/,''),at:performance.now(),status:'pending'}:null;
+  if(event)window.__audioLog.push(event);
+  const promise=play.call(this);
+  if(event&&promise)promise.then(()=>{event.status='playing';},error=>{event.status=error.name;});
+  return promise;
+ };
+};
+async function shift(page,h,m,s=1){await page.evaluate(([h,m,s])=>__BBC__.setClockOffset(new Date(2026,10,8,h,m,s).getTime()-Date.now()),[h,m,s]);}
+async function resetLog(page){await page.locator('#btn-stop').tap();await page.evaluate(()=>{__audioLog.length=0;__vibration.length=0;});}
+async function waitPlays(page,n){await page.waitForFunction(n=>__audioLog.filter(e=>e.status==='playing').length>=n,n,{timeout:40000});}
+async function files(page){return page.evaluate(()=>__audioLog.filter(e=>e.status==='playing').map(e=>e.file));}
+async function playback(page){
+ await page.setViewportSize({width:390,height:844});await shift(page,13,7);
+ await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentTime>.1),'first tap really advances decoded audio');
+ await waitPlays(page,4);check(JSON.stringify(await files(page))===JSON.stringify(['n-gs4','n-fs4','n-e4','n-b3']),':15 four correct actual plays');
+ await resetLog(page);await page.locator('#btn-q2').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(await page.evaluate(()=>__BBC__.players.q30.currentTime>.1),':30 recorded eight-note asset advances');
+ await resetLog(page);await page.locator('#btn-q3').tap();await waitPlays(page,5);
+ check(JSON.stringify(await files(page))===JSON.stringify(['q45a','n-gs4','n-fs4','n-e4','n-b3']),':45 recorded eight + four notes');
+ await resetLog(page);await page.locator('#btn-q4').tap();await waitPlays(page,2);
+ check(JSON.stringify(await files(page))===JSON.stringify(['melody','bong']),':00 complete recording then hour strike');
+ check(await page.locator('#count').textContent()==='1',':00 counter shows the real first strike');
+ await shift(page,15,7);await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,3);
+ const bongs=await page.evaluate(()=>__audioLog.filter(e=>e.file==='bong'&&e.status==='playing'));
+ check(bongs.length===3,'BONGY uses the current twelve-hour count');
+ for(let i=1;i<bongs.length;i++)check(Math.abs((bongs[i].at-bongs[i-1].at)/1000-4.015)<.15,'real bong spacing '+i,bongs[i].at-bongs[i-1].at);
+ check(await page.locator('#count').textContent()==='3','count reaches three');
+ check(await page.locator('.tower').evaluate(e=>e.classList.contains('sway')),'tower feedback runs on bong');
+ check(await page.evaluate(()=>__vibration.length===3&&__vibration.every(v=>v===140)),'vibration hook per bong');
+ await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,1);await page.locator('#btn-stop').tap();await page.waitForTimeout(4200);
+ check((await files(page)).length===1,'STOP prevents the next real scheduled strike');
+ check(await page.evaluate(()=>[__BBC__.players.melody,__BBC__.players.q30,__BBC__.players.q45a,...Object.values(__BBC__.players.notes),...__BBC__.players.bongs].every(p=>p.paused)),'STOP pauses every actual media element');
+ await page.emulateMedia({reducedMotion:'reduce'});await resetLog(page);await page.locator('#btn-bongs').tap();await waitPlays(page,1);
+ check(await page.locator('.tower').evaluate(e=>getComputedStyle(e).animationName==='none'),'reduced motion disables tower sway');
+ await page.locator('#btn-stop').tap();check(await page.locator('#btn-stop').evaluate(e=>getComputedStyle(e).animationName==='none'),'reduced motion disables STOP pulse');
+ await page.emulateMedia({reducedMotion:'no-preference'});
+}
+async function autoAndPersistence(page){
+ await shift(page,13,7);await resetLog(page);await page.locator('#btn-quarter').tap();
+ check(await page.evaluate(()=>localStorage.getItem('bbc-quarter')==='1'),'auto ON is persisted');
+ for(const [h,m,file,q] of [[13,15,'n-gs4',1],[13,30,'q30',2],[13,45,'q45a',3],[14,0,'melody',0]]){
+  await resetLog(page);await shift(page,h,m);await waitPlays(page,1);
+  check((await files(page))[0]===file,'automatic mark '+m+' selects correct sequence');
+  if(q===0)check(await page.evaluate(()=>__BBC__.stats().timers===3),'automatic hour includes two pending strikes at 14:00');
+ }
+ await resetLog(page);await shift(page,14,33);await page.waitForTimeout(1100);check((await files(page)).length===0,'stale automatic quarter is not played');
+ await page.locator('#btn-mute').tap();
+ const saved=await page.evaluate(()=>localStorage.getItem('bbc-volume'));
+ await page.addInitScript(()=>{const NativeDate=Date,start=NativeDate.now(),base=new NativeDate(2026,10,8,14,15,30).getTime();window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:[base+NativeDate.now()-start]));}static now(){return base+NativeDate.now()-start;}};});
+ await page.reload();await page.waitForTimeout(1100);
+ check(await page.evaluate(()=>__BBC__.scheduler.isEnabled()&&__BBC__.isQuarterOn()),'saved ON auto re-arms at boot');
+ check(await page.evaluate(()=>__BBC__.stats().gen===0&&__BBC__.stats().timers===0&&__audioLog.length===0),'relaunch inside grace has no mid-mark blast');
+ check(await page.locator('#volume').isDisabled(),'mute survives reload');
+ check(await page.locator('#volume').inputValue()===saved,'volume survives reload');
+ await page.locator('#btn-mute').tap();await page.waitForFunction(()=>__BBC__.isUnlocked());await resetLog(page);await shift(page,14,30);await waitPlays(page,1);
+ check((await files(page))[0]==='q30','restored automatic mode sounds the next quarter after a gesture');
+ await resetLog(page);await page.locator('#btn-quarter').tap();
+}
+async function offlineUpgrade(browser,base){
+ revision='d6b60f3';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.0.1')),'real previous release cache installed');
+ await page.evaluate(async()=>{await caches.open('unrelated-app-v1');window.__controllerChanged=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{window.__controllerChanged=true;});});revision=null;
+ await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
+ await page.waitForFunction(()=>window.__controllerChanged&&navigator.serviceWorker.controller.state==='activated');
+ check(await page.evaluate(async()=>(await caches.keys()).includes('unrelated-app-v1')),'real upgrade preserves unrelated caches');
+ const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.1.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-q1')};});
+ console.log('activated upgrade',state);
+ check(state.newUI,'upgraded release actually contains the new page',state);
+ await page.reload();await page.waitForSelector('#btn-q1');
+ const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');const assets=[...sw.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
+ const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.1.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
+ check(!missing.length&&state.count===assets.length,'all release assets cached after upgrade',{count:assets.length,missing});
+ const before=serverRequests.length;await page.reload();await page.waitForTimeout(150);
+ check(serverRequests.slice(before).filter(p=>p!=='sw.js').length===0,'cached reload makes no asset refetches',serverRequests.slice(before));
+ await context.setOffline(true);await page.reload();await page.waitForFunction(()=>document.querySelector('.tower').naturalWidth>0);
+ await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentTime>.1),'upgraded app and real audio work offline');
+ const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.1.0'),url=new URL('audio/n-fs4.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
+ check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
+ await context.close();
+}
+async function fallbackAndFile(browser,base){
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ await context.addInitScript(()=>{const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('audio/mp4')?'':original.call(this,type);};});
+ const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ await context.setOffline(true);await page.reload();await page.locator('#btn-q1').tap();await waitPlays(page,1);await page.waitForTimeout(220);
+ check(await page.evaluate(()=>__BBC__.players.notes['n-gs4'].currentSrc.endsWith('.ogg')&&__BBC__.players.notes['n-gs4'].currentTime>.1),'real Vorbis fallback plays offline');
+ await context.close();
+ const local=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const file=await local.newPage();const failures=[];file.on('pageerror',e=>failures.push(String(e)));
+ await file.goto('file://'+path.join(ROOT,'index.html'));
+ check(await file.locator('button').count()===8&&failures.length===0,'file URL boots without service-worker errors',failures);
+ await local.close();
 }
 async function main(){
  assert.ok(OUT,'Set BBC_EVIDENCE_DIR or TMPDIR');await fs.mkdir(OUT,{recursive:true});
@@ -50,10 +176,23 @@ async function main(){
  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',args:['--no-sandbox']});
  try{
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await context.addInitScript(INIT);
   const page=await context.newPage();page.on('pageerror',e=>errors.push({name:'pageerror',detail:String(e)}));
+  page.on('console',message=>{if(message.type()==='error')errors.push({name:'console error',detail:message.text()});});
+  const external=[];context.on('request',request=>{if(!request.url().startsWith(base))external.push(request.url());});
   await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  await geometry(page);
+  if(!process.argv.includes('--upgrade-only')){
+   await playback(page);
+   await shift(page,13,7);await geometry(page,context);
+   await page.setViewportSize({width:390,height:844});await autoAndPersistence(page);
+  }
+  check(external.length===0,'zero external runtime requests',external);
   await context.close();
+  await offlineUpgrade(browser,base);
+  await fallbackAndFile(browser,base);
+ }catch(error){
+  errors.push({name:'runner failure',detail:String(error)});
+  throw error;
  }finally{
   await browser.close();await new Promise(resolve=>server.close(resolve));
   await fs.writeFile(path.join(OUT,'golden_inventory.json'),JSON.stringify(controls,null,2));

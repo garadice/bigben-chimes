@@ -274,5 +274,6 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   #btn-stop.pressed { animation: none; }
+  .tower.sway { animation: none; transform: none; }
   .count { transition: none; }
 }
