@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-function harness() {
+function harness(options = {}) {
   const elements = new Map();
   const audio = [];
   const timers = new Map();
@@ -42,7 +42,11 @@ function harness() {
       log.push({type: 'play', src: this.src, muted: this.muted});
       return new Promise((resolve, reject) => this.pending.push({resolve, reject}));
     }
-    pause() { this.paused = true; log.push({type: 'pause', src: this.src}); }
+    pause() {
+      this.paused = true; log.push({type: 'pause', src: this.src});
+      // Real HTMLMediaElement rejects play() if paused before media is ready.
+      if (options.abortOnPause) for (const p of this.pending.splice(0)) p.reject({name:'AbortError'});
+    }
   }
   const storage = new Map();
   const context = {
@@ -68,6 +72,17 @@ function harness() {
     runTimers() { const due = [...timers.entries()]; timers.clear(); for (const [,t] of due) t.fn(); }
   };
 }
+
+test('a cold pointerdown-to-click does not abort its own pending media unlock', async () => {
+  const h = harness({abortOnPause:true});
+  h.element('document').fire('pointerdown');
+  h.element('btn-q1').fire('click');
+  h.resolveAudio();
+  await h.settle();
+  assert.equal(h.app.isUnlocked(), true);
+  h.runTimers();
+  assert.deepEqual(h.log.filter(e => e.type === 'play' && !e.muted).map(e => e.src), ['audio/q15.m4a']);
+});
 
 test('STOP invalidates a button tap still waiting for audio unlock', async () => {
   const h = harness();

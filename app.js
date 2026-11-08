@@ -116,10 +116,14 @@
     } catch (e) { /* no vibration support — fine */ }
   }
 
-  function stopAllPlayers() {
+  function stopAllPlayers(preserveUnlock) {
     var all = [players.melody, players.q30, players.q15, players.q45]
       .concat(players.bongs);
     all.forEach(function (p) {
+      // pointerdown may still be loading the muted first-gesture sweep.
+      // A manual click must cancel OLD sound, not abort its own play()
+      // readiness promises. STOP still passes false and pauses everything.
+      if (preserveUnlock && unlockPromise && p.muted) return;
       try {
         p.pause();
         p.currentTime = 0;
@@ -198,7 +202,7 @@
     return gen;
   }
 
-  function cancelAll() {
+  function cancelAll(preserveUnlock) {
     seqGen++;
     seqTimers.forEach(clearTimeout);
     seqTimers = [];
@@ -207,7 +211,7 @@
     $count.classList.remove('show');
     if ($tower) $tower.classList.remove('sway');
     hideArmed();
-    stopAllPlayers();
+    stopAllPlayers(preserveUnlock);
   }
 
   // ---------- quarter scheduler ----------
@@ -348,7 +352,7 @@
 
   function userPlay(eventsFactory, onEnd, onStart) {
     return function () {
-      cancelAll(); // invalidate older taps even while their unlock is pending
+      cancelAll(true); // invalidate older taps without aborting gesture priming
       var gen = seqGen;
       unlock().then(function (ready) {
         if (ready && gen === seqGen) playEvents(eventsFactory(), onEnd, onStart);
