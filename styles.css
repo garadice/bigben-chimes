@@ -1,6 +1,6 @@
 /* Big Ben Chimes — kid-first styles, v1.1.
  * Palette from the tower: gilt gold, dial cream, ink, dusk navy.
- * v1.1: the photo is the layout — full tower visible (contain), controls are
+ * v1.1: the photo is the layout — full tower visible, controls are
  * a compact column of translucent squares on the right edge. */
 
 :root {
@@ -41,6 +41,11 @@ html, body {
   object-position: 50% 30%; /* bias toward the clock stage on tall screens */
   z-index: 0;
   transform-origin: 50% 100%;  /* sway pivots at the ground */
+}
+
+/* Wider/shorter portraits must not crop the spire or base vertically. */
+@media (min-aspect-ratio: 1600/3192) {
+  .tower { object-fit: contain; object-position: center; }
 }
 
 /* soft readability scrim — light, so the photo stays the hero */
@@ -192,6 +197,8 @@ body::before {
 }
 
 #btn-mute {
+  min-width: 44px;
+  min-height: 44px;
   font-size: 24px;
   line-height: 1;
   background: none;
@@ -203,7 +210,7 @@ body::before {
 
 #volume {
   width: 118px;
-  height: 30px;
+  height: 44px;
   accent-color: var(--gilt);
   cursor: pointer;
   -webkit-appearance: none;
@@ -230,23 +237,27 @@ body::before {
 .credit {
   position: fixed;
   z-index: 3;
-  bottom: max(56px, calc(env(safe-area-inset-bottom) + 48px));
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 9.5px;
+  bottom: max(70px, calc(env(safe-area-inset-bottom) + 60px));
+  left: max(10px, env(safe-area-inset-left));
+  font-size: 10.5px;
   line-height: 1.4;
   color: rgba(247, 236, 212, 0.78);
   text-align: center;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
-  max-width: min(92vw, 430px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: max-content;
+  max-width: calc(100vw - var(--sq) - 30px);
+  overflow-wrap: anywhere;
 }
 .credit a { color: inherit; }
 
 /* ---------- landscape: the column becomes a bottom row ---------- */
 @media (orientation: landscape) {
+  .tower {
+    top: 64px;
+    height: calc(100% - 160px);
+    object-fit: contain;
+    object-position: center;
+  }
   .pad {
     top: auto;
     bottom: max(10px, env(safe-area-inset-bottom));
@@ -257,6 +268,11 @@ body::before {
     column-gap: 10px;
   }
   .credit { bottom: auto; top: max(6px, env(safe-area-inset-top)); left: auto;
-            right: max(10px, env(safe-area-inset-right)); transform: none; }
-  .volwrap { bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px)); }
+            right: max(10px, env(safe-area-inset-right)); max-width: calc(100vw - 180px); }
+  .volwrap { bottom: max(86px, calc(env(safe-area-inset-bottom) + 76px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #btn-stop.pressed { animation: none; }
+  .count { transition: none; }
 }

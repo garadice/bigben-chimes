@@ -1,7 +1,7 @@
 # Big Ben Chimes 🔔
 
 A tiny ad-free app for one specific 6-year-old: the whole Big Ben tower on
-screen and one row of big emoji squares that make it really chime. The
+screen and a right-edge column of big emoji squares that make it really chime. The
 sounds are genuine recordings of Big Ben from 1 January 1945 (public
 domain), the photo is openly licensed.
 
@@ -31,7 +31,10 @@ photo stays visible.
 3. Launch it from the home screen — it runs full-screen and works offline
    after the first load (all sounds and the photo are cached on the device).
 
-First tap unlocks audio (Android rule) — after that every button just works.
+First tap unlocks audio (Android rule). After restarting the browser, tap
+once again to allow automatic sound; the saved auto setting still re-arms
+without a surprise chime on launch. Keep the app in the foreground: Android
+may pause background tabs or locked-screen apps, so this is not an alarm clock.
 
 ## Credits
 
