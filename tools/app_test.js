@@ -188,6 +188,17 @@ test('picker PLAY schedules the melody then EXACTLY the chosen strikes', async (
     'the armed badge clears when the timeline ends');
 });
 
+test('the chosen-hour badge lasts through the final strike decay', async () => {
+  const h = harness();
+  h.element('btn-picker').fire('click');
+  h.element('btn-p1').fire('click');
+  h.element('picker-play').fire('click');
+  h.resolveAudio(); await h.settle();
+  const last = Math.max(...[...h.timers.values()].map(t => t.ms));
+  assert.ok(last >= (20.8 + .6 + 3.43) * 1000 - 1,
+    'badge must not clear 1.2 seconds into a 3.43-second strike');
+});
+
 test('the armed badge shows the chosen hour while the picker plays', async () => {
   const h = harness();
   h.element('btn-picker').fire('click');

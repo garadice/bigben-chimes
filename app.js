@@ -172,7 +172,8 @@
 
   /**
    * Schedule an event timeline [{file, at, n?}] (seconds). onEnd fires once
-   * after the last event +1.2 s; onStart fires once right after scheduling
+   * after the final strike decay (1.2 s fallback for other event types);
+   * onStart fires once right after scheduling
    * (post-cancelAll). Both are suppressed by a newer tap or STOP.
    * Returns gen id.
    */
@@ -193,10 +194,12 @@
       }, delayMs));
     });
     if (onEnd) {
-      var lastAt = events.length ? events[events.length - 1].at : 0;
+      var last = events.length ? events[events.length - 1] : null;
+      var lastAt = last ? last.at : 0;
+      var tailMs = last && last.file === 'bong' ? C.BONG_DUR * 1000 : 1200;
       seqTimers.push(setTimeout(function () {
         if (gen === seqGen) onEnd();
-      }, lastAt * 1000 + 1200));
+      }, lastAt * 1000 + tailMs));
     }
     if (onStart && gen === seqGen) onStart();
     return gen;

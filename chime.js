@@ -28,6 +28,7 @@
 
   /* ---- evidence-derived constants (docs/DEV.md) ---- */
   var BONG_GAP = 4.015;     // mean of 11 independently measured strike intervals
+  var BONG_DUR = 3.43;     // the complete shipped strike and its decay
   var STRIKE_PAUSE = 0.6;   // melody asset end -> first strike (kid-friendly)
   var MELODY_DUR = 20.80;   // audio/melody.m4a
 
@@ -164,6 +165,7 @@
 
   var api = {
     BONG_GAP: BONG_GAP,
+    BONG_DUR: BONG_DUR,
     STRIKE_PAUSE: STRIKE_PAUSE,
     MELODY_DUR: MELODY_DUR,
     bongsForHour: bongsForHour,
