@@ -130,8 +130,22 @@ class AudioTests(unittest.TestCase):
                  float(np.abs(self.source[int(7.60 * self.sr):int(13.90 * self.sr)]).max()))
         self.assertGreater(c, .96, f'q45.{ext}: base segment is not the recorded changes 4+5 ({c:.4f})')
 
-        # joined phrase fingerprints as change 1 (G# F# E B)
-        for note, at in [('G#', Q45_JOIN), ('F#', Q45_JOIN + recipe.STEPS[0]),
+        # G# starts under the recorded E decay: its inharmonic B-band partial
+        # can beat the G# band at HONEST source levels. Verify the new G#
+        # waveform after subtracting the known base, not the loudest band.
+        a = mono[int(.2 * self.sr):int(6.0 * self.sr)]
+        b = self.source[int(7.7 * self.sr):int(13.5 * self.sr)]
+        gain = float(np.dot(a, b) / np.dot(b, b))
+        joined_at = Q45_JOIN - .012
+        lo, hi = int((joined_at + .1) * self.sr), int((joined_at + .3) * self.sr)
+        base = self.source[int(7.50 * self.sr) + lo:int(7.50 * self.sr) + hi]
+        isolated = mono[lo:hi] - base * gain
+        reference = self.source[int(1.498 * self.sr):int(1.698 * self.sr)]
+        self.assertGreater(corr(isolated, reference), .96, 'joined G# source attack must survive the mix')
+        src_flux = band_flux_new_energy(self.source, self.sr, 1.41, FING)
+        self.assertEqual(max(src_flux, key=src_flux.get), 'G#')
+        # The remaining newly struck bells dominate their own fingerprint band.
+        for note, at in [('F#', Q45_JOIN + recipe.STEPS[0]),
                          ('E', Q45_JOIN + recipe.STEPS[0] + recipe.STEPS[1]),
                          ('B', Q45_JOIN + recipe.STEPS[0] + recipe.STEPS[1] + recipe.STEPS[2])]:
             flux = band_flux_new_energy(mono, self.sr, at, FING)
@@ -162,6 +176,21 @@ class AudioTests(unittest.TestCase):
         self.assertLessEqual(worst15, worst30 + 1.5,
                              f'q15 envelope cliffs ({worst15:.1f} dB/20ms) exceed the q30 '
                              f'reference ({worst30:.1f} dB/20ms) — stitching is audible again')
+
+    def test_q45_uses_the_same_source_gain_for_base_and_joined_phrase(self):
+        """Correlation alone cannot detect a normalized insert becoming 12 dB louder."""
+        for ext in ['m4a', 'ogg']:
+            asset = decode(ROOT / 'audio' / f'q45.{ext}').mean(1)
+            def gain(asset_at, source_at, duration):
+                a = asset[int(asset_at * self.sr):int((asset_at + duration) * self.sr)]
+                b = self.source[int(source_at * self.sr):int((source_at + duration) * self.sr)]
+                n = min(len(a), len(b)); a, b = a[:n], b[:n]
+                return float(np.dot(a, b) / np.dot(b, b))
+            base_gain = gain(.2, 7.7, 5.8)
+            # E slice after the F# tail ends, before the B insert begins.
+            joined_gain = gain(6.558 + 1.38, .42, .30)
+            mismatch = abs(20 * np.log10(joined_gain / base_gain))
+            self.assertLess(mismatch, 1.0, f'{ext}: q45 gain changes {mismatch:.2f} dB at change 1')
 
     def test_source_strike_interval(self):
         x = signal.resample_poly(self.source, 1, 6)

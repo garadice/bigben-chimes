@@ -111,7 +111,7 @@ def quietest_room_window(mono, lo_s=18.5, hi_s=21.0, win_s=1.0):
     return best_a / SR
 
 
-def build_q15(src, mono):
+def build_q15(src, mono, normalize=True):
     """Change 1 (G# F# E B) at the measured rhythm, overlap-added."""
     g_at, f_at = ATTACKS['G#'][0], ATTACKS['F#'][0]
     e_at, b_at = ATTACKS['E'][0], ATTACKS['B'][0]
@@ -135,7 +135,8 @@ def build_q15(src, mono):
     room = src[room_a:room_a + n]
     buf[b_end_idx - n:b_end_idx] = buf[b_end_idx - n:b_end_idx] * np.cos(t) + room * np.sin(t)
     buf = buf[:b_end_idx + int(0.15 * SR)]
-    return finalize(buf), positions
+    # Keep the insert at source level until the WHOLE q45 phrase is mixed.
+    return (finalize(buf) if normalize else buf), positions
 
 
 def build_q45(src, mono, q15_buf):
@@ -198,8 +199,9 @@ def main():
 
     src = decode_stereo(source)
     mono = src.mean(axis=1)
-    q15, positions = build_q15(src, mono)
-    q45, q15_at = build_q45(src, mono, q15)
+    q15_raw, positions = build_q15(src, mono, normalize=False)
+    q45, q15_at = build_q45(src, mono, q15_raw)
+    q15 = finalize(q15_raw)
     wavio.write(str(out / 'q15.wav'), SR, q15.astype(np.float32))
     wavio.write(str(out / 'q45.wav'), SR, q45.astype(np.float32))
     encode(out / 'q15.wav', out / 'q15')
