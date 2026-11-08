@@ -229,6 +229,7 @@
 
   // ---------- UI ----------
   var $clock = document.getElementById('clock');
+  var $clockButton = document.getElementById('btn-clock');
   var $btnQ = {
     1: document.getElementById('btn-q1'),
     2: document.getElementById('btn-q2'),
@@ -246,6 +247,10 @@
   var $picker = document.getElementById('picker');
   var $pickerPlay = document.getElementById('picker-play');
   var $pickerClose = document.getElementById('picker-close');
+  var $pickerStop = document.getElementById('picker-stop');
+  var pickerReturnFocus = null;
+  var pickerBackground = [document.querySelector('.dial'), document.querySelector('.pad'),
+    document.querySelector('.volwrap')];
   var $armed = document.getElementById('armed');
   var $pickerNums = {};
   for (var h = 1; h <= 12; h++) {
@@ -264,18 +269,29 @@
   }
 
   function openPicker() {
+    if (pickerOpen) return;
+    pickerReturnFocus = document.activeElement;
     pickerOpen = true;
     $picker.classList.add('open');
     $btnPicker.classList.add('on');
     $picker.setAttribute('aria-hidden', 'false');
+    pickerBackground.forEach(function (el) { el.inert = true; });
+    $btnPicker.setAttribute('aria-expanded', 'true');
+    $clockButton.setAttribute('aria-expanded', 'true');
     renderPicker();
+    $pickerClose.focus();
   }
 
   function closePicker() {
+    var wasOpen = pickerOpen;
     pickerOpen = false;
     $picker.classList.remove('open');
     $btnPicker.classList.remove('on');
     $picker.setAttribute('aria-hidden', 'true');
+    pickerBackground.forEach(function (el) { el.inert = false; });
+    $btnPicker.setAttribute('aria-expanded', 'false');
+    $clockButton.setAttribute('aria-expanded', 'false');
+    if (wasOpen) (pickerReturnFocus || $btnPicker).focus();
   }
 
   function showArmed(n) {
@@ -291,6 +307,21 @@
     if (pickerOpen) closePicker(); else openPicker();
   });
   $pickerClose.addEventListener('click', closePicker);
+  $picker.addEventListener('keydown', function (event) {
+    if (!pickerOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePicker();
+    } else if (event.key === 'Tab') {
+      var buttons = $picker.querySelectorAll('button');
+      var first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    }
+  });
 
   (function () {
     for (var n = 1; n <= 12; n++) {
@@ -385,7 +416,7 @@
 
   // STOP: silence everything now, kill all pending timers (the auto toggle
   // stays as it is — stopping sound is not switching the mode off).
-  $btnStop.addEventListener('click', function () {
+  function stopPlayback() {
     pickerHour = null;
     renderPicker();
     closePicker();
@@ -393,7 +424,9 @@
     $btnStop.classList.remove('pressed');
     void $btnStop.offsetWidth; // restart the pulse animation
     $btnStop.classList.add('pressed');
-  });
+  }
+  $btnStop.addEventListener('click', stopPlayback);
+  $pickerStop.addEventListener('click', stopPlayback);
 
   $btnMute.addEventListener('click', function () {
     muted = !muted;
@@ -411,7 +444,7 @@
   });
 
   // Tapping the clock opens the picker too (kid-sized target, same action).
-  $clock.addEventListener('click', function () { openPicker(); });
+  $clockButton.addEventListener('click', function () { openPicker(); });
 
   // First touch anywhere unlocks audio (Android Chrome gesture rule).
   ['pointerdown', 'touchend'].forEach(function (evtName) {

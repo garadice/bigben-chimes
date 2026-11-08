@@ -217,6 +217,25 @@ async function firstAutoGesture(browser,base){
  check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'first auto tap waits for slow real media priming');
  await page.locator('#btn-stop').tap();await context.close();
 }
+async function pickerModalInteraction(page){
+ await page.setViewportSize({width:390,height:844});await shift(page,15,7);await resetLog(page);
+ await page.locator('#btn-bongs').tap();await waitPlays(page,1);
+ await page.locator('#btn-picker').tap();await page.locator('#btn-p7').tap();
+ await page.locator('#picker-stop').tap({timeout:2000});
+ check(await page.evaluate(()=>!__BBC__.pickerState().open&&__BBC__.pickerState().hour===null),'real modal STOP closes and discards choice');
+ check(await page.evaluate(()=>__BBC__.players.bongs.every(p=>p.paused)&&__BBC__.stats().timers===0),'real modal STOP pauses current chime and cancels later strikes');
+ await page.locator('#btn-picker').tap();
+ check(await page.evaluate(()=>document.activeElement.id==='picker-close'),'picker receives keyboard focus');
+ await page.keyboard.press('Shift+Tab');
+ check(await page.evaluate(()=>document.activeElement.id==='picker-play'),'picker traps backward focus');
+ await page.keyboard.press('Tab');
+ check(await page.evaluate(()=>document.activeElement.id==='picker-close'),'picker traps forward focus');
+ await page.keyboard.press('Escape');
+ check(await page.evaluate(()=>!__BBC__.pickerState().open&&document.activeElement.id==='btn-picker'),'Escape closes picker and restores opener focus');
+ await page.locator('#btn-clock').focus();await page.keyboard.press('Enter');
+ check(await page.evaluate(()=>__BBC__.pickerState().open),'clock works as a keyboard control');
+ await page.keyboard.press('Escape');
+}
 async function fallbackAndFile(browser,base){
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  await context.addInitScript(()=>{const original=HTMLMediaElement.prototype.canPlayType;HTMLMediaElement.prototype.canPlayType=function(type){return type.includes('audio/mp4')?'':original.call(this,type);};});
@@ -241,7 +260,9 @@ async function main(){
   page.on('console',message=>{if(message.type()==='error')errors.push({name:'console error',detail:message.text()});});
   const external=[];context.on('request',request=>{if(!request.url().startsWith(base))external.push(request.url());});
   await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
-  if(!process.argv.includes('--upgrade-only')){
+  if(process.argv.includes('--modal-only')){
+   await pickerModalInteraction(page);
+  }else if(!process.argv.includes('--upgrade-only')){
    await playback(page);
    await pickerPlayback(page);
    await shift(page,13,7);await geometry(page,context);
@@ -249,9 +270,11 @@ async function main(){
   }
   check(external.length===0,'zero external runtime requests',external);
   await context.close();
-  await offlineUpgrade(browser,base);
-  await firstAutoGesture(browser,base);
-  await fallbackAndFile(browser,base);
+  if(!process.argv.includes('--modal-only')){
+   await offlineUpgrade(browser,base);
+   await firstAutoGesture(browser,base);
+   await fallbackAndFile(browser,base);
+  }
  }catch(error){
   errors.push({name:'runner failure',detail:String(error)});
   throw error;

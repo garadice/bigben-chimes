@@ -76,6 +76,8 @@ body::before {
   background: rgba(247, 236, 212, 0.92);
   border: 3px solid var(--gilt);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), inset 0 0 0 1.5px var(--ink);
+  min-height: 44px;
+  cursor: pointer;
 }
 
 #clock {
@@ -117,7 +119,7 @@ body::before {
   transition: transform 0.08s ease, filter 0.15s ease;
 }
 .sq:active { transform: scale(0.92); filter: brightness(1.25); }
-.sq:focus-visible, #btn-mute:focus-visible, #volume:focus-visible {
+.sq:focus-visible, .dial:focus-visible, #btn-mute:focus-visible, #volume:focus-visible {
   outline: 3px solid var(--gilt);
   outline-offset: 3px;
 }
@@ -305,6 +307,12 @@ body::before {
   font-size: 26px;
   line-height: 1;
   cursor: pointer;
+}
+
+.pstop {
+  right: auto;
+  left: max(10px, env(safe-area-inset-left));
+  background: var(--stop);
 }
 
 .pgrid {

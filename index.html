@@ -14,7 +14,7 @@
 <body>
   <img class="tower" src="photo/bigben.jpg" alt="Big Ben" draggable="false" aria-hidden="true">
 
-  <div class="dial"><time id="clock">--:--</time></div>
+  <button class="dial" id="btn-clock" aria-label="Vybrať hodinu" aria-haspopup="dialog"><time id="clock">--:--</time></button>
 
   <div class="count" id="count" aria-hidden="true"></div>
   <div class="armed" id="armed" aria-hidden="true"></div>
@@ -49,8 +49,9 @@
   </nav>
 
   <!-- translucent hour picker: numbers 1–12, one big play button, photo shows through -->
-  <div class="picker" id="picker" role="dialog" aria-label="Vybrať hodinu" aria-hidden="true">
+  <div class="picker" id="picker" role="dialog" aria-modal="true" aria-label="Vybrať hodinu" aria-hidden="true">
     <button id="picker-close" class="pclose" aria-label="Zavrieť">✕</button>
+    <button id="picker-stop" class="pclose pstop" aria-label="Stop — hneď ticho">✋</button>
     <div class="pgrid" role="group" aria-label="Hodiny">
       <button id="btn-p1" class="pnum" aria-label="Hodina 1">1</button>
       <button id="btn-p2" class="pnum" aria-label="Hodina 2">2</button>

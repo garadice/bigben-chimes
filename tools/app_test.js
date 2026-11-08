@@ -29,6 +29,7 @@ function harness(options = {}) {
         toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }
       },
       setAttribute(name, value) { this[name] = value; },
+      focus() { context.document.activeElement = this; },
       addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); },
       fire(name) { for (const fn of this.listeners[name] || []) fn(); }
     };
@@ -266,7 +267,7 @@ test('the overlay close button closes without playing', () => {
 
 test('tapping the clock opens the picker', () => {
   const h = harness();
-  h.element('clock').fire('click');
+  h.element('btn-clock').fire('click');
   assert.equal(h.app.pickerState().open, true);
   h.element('btn-picker').fire('click'); // toggle closes it again
   assert.equal(h.app.pickerState().open, false);
