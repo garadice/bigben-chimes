@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Big Ben Chimes</title>
+  <meta name="description" content="Skutočný Veľký Ben zvoní celé štvrťhodiny aj bongy. Pre Matka.">
+  <meta name="theme-color" content="#101a3c">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <img class="tower" src="photo/bigben.jpg" alt="Big Ben" draggable="false" aria-hidden="true">
+  <div class="scrim" aria-hidden="true"></div>
+
+  <main>
+    <div class="dial"><time id="clock">--:--</time></div>
+
+    <div class="controls">
+      <button id="btn-full" class="big">
+        <span class="ico" aria-hidden="true">🔔</span>
+        <span class="lbl">ZVONY</span>
+      </button>
+
+      <button id="btn-bongs" class="big">
+        <span class="ico" aria-hidden="true">🛎</span>
+        <span class="lbl">BONGY</span>
+      </button>
+
+      <button id="btn-quarter" class="big" aria-pressed="false">
+        <span class="ico" aria-hidden="true">⏰</span>
+        <span class="lbl">KAŽDÚ ŠTVRŤ</span>
+        <span class="state">VYP</span>
+      </button>
+
+      <div class="volrow">
+        <button id="btn-mute" aria-label="Ticho">🔊</button>
+        <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Hlasitosť">
+      </div>
+    </div>
+
+    <p class="credit">📷 Diliff / Wikimedia Commons (CC BY 2.5) · zvony: Radio Oranje 1. 1. 1945 (public domain)</p>
+  </main>
+
+  <script src="chime.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
