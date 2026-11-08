@@ -285,6 +285,7 @@
 
   // ---------- boot ----------
   loadState();
+  scheduler.setEnabledQuiet(quarterOn); // arm restored toggle; current mark consumed (no mid-mark blast)
   applyVolume();
   $vol.value = String(volume);
   renderClock();

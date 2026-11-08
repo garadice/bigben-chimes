@@ -62,7 +62,8 @@ LICENSES.md         every non-code asset: source URL + author + license
   is consumed silently — no blast from the past; the next fresh mark fires.
 - Plain `setEnabled(true)` mid-mark fires the current mark at once
   (deliberate: toggling on gives instant feedback if inside grace).
-- `setEnabledQuiet(true)` exists for tests to arm without firing.
+- `setEnabledQuiet(true)` arms without firing — used at boot (app.js) to
+  restore a persisted ON toggle (no mid-mark blast) and in tests.
 
 ## Audio unlock (Android Chrome)
 
