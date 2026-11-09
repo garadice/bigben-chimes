@@ -212,19 +212,19 @@ async function autoAndPersistence(page){
  await resetLog(page);await page.locator('#btn-quarter').tap();
 }
 async function offlineUpgrade(browser,base){
- revision='bc8bd69';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ revision='df2c68f';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
- check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.1.0')),'real previous release cache installed');
+ check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.2.0')),'real previous release cache installed');
  await page.evaluate(async()=>{await caches.open('unrelated-app-v1');window.__controllerChanged=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{window.__controllerChanged=true;});});revision=null;
  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
  await page.waitForFunction(()=>window.__controllerChanged&&navigator.serviceWorker.controller.state==='activated');
  check(await page.evaluate(async()=>(await caches.keys()).includes('unrelated-app-v1')),'real upgrade preserves unrelated caches');
- const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
+ const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.1'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
  console.log('activated upgrade',state);
  check(state.newUI,'upgraded release actually contains the new page',state);
  await page.reload();await page.waitForSelector('#btn-picker');
  const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');const assets=[...sw.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
- const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.2.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
+ const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.2.1');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
  check(!missing.length&&state.count===assets.length,'all release assets cached after upgrade',{count:assets.length,missing});
  const before=serverRequests.length;await page.reload();await page.waitForTimeout(150);
  check(serverRequests.slice(before).filter(p=>p!=='sw.js').length===0,'cached reload makes no asset refetches',serverRequests.slice(before));
@@ -233,7 +233,7 @@ async function offlineUpgrade(browser,base){
  check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),'upgraded app and real audio work offline');
  check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'offline :15 uses the new assembled asset');
  await offlineAssets(page,'AAC');
- const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.0'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
+ const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.2.1'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
 }

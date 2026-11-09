@@ -3,7 +3,7 @@
 Static HTML/CSS/JS; no build, dependencies, trackers, external fonts, or
 runtime API calls. Serve the repository as-is. The service worker precaches
 all local photo/audio/icon/shell files. Keep `CACHE` different from the last
-**published** release; this unpublished release is `bigben-chimes-v1.2.0`.
+**published** release; this unpublished release is `bigben-chimes-v1.2.1`.
 
 ## Files
 
@@ -143,13 +143,60 @@ These are waveform/provenance checks, NOT an audible phone-listen verdict.
 The per-note slice assets (`n-*`) and the `q45a` chunk are retired; the
 service worker no longer precaches them.
 
+## v1.2.1 — :15 rebuilt from the approved :45 (2026-11-09)
+
+Martin's second phone listen approved :45 but still rejected :15. The
+diagnosis held: the change-1 material itself passes his ear inside :45, so
+:15's remaining problem is how it STARTS. Measured on the v1.2.0 assets:
+
+- The old :15's first G# rose out of 12 ms of room tone after digital
+  silence; in :45 the same G# rises out of the ringing tonic minim
+  (−17.4 dBFS rms vs −38.6 dBFS source room tone — a ~21 dB difference in
+  the hand-over ambience).
+- Instance/gain identity was already correct: :15's F#/E/B notes matched
+  :45's tail at 0.00 dB gain delta (corr ≥ 0.996). Only the first note's
+  window correlated poorly (0.63) — its CONTEXT differed, not its level.
+
+So the standalone `q15` is no longer its own assembly. `tools/cut_audio.py`
+builds the change-1 insert only inside `q45` (unchanged recipe, frozen) and
+cuts the finished, normalized :45 at the insert boundary (6.558 s): the
+final four notes with their envelopes and the room-tone dissolve his ear
+approved, sample for sample. Prepended: the 1945 recording's own room tone
+(the quietest 1 s ring-out window, 19.95 s — the same window the dissolve
+continues), 300 ms, sin² fade-in to full ambience at the asset's gain.
+No renormalization: nothing after the lead-in differs from :45, and the
+v1.2.0 phrase-initial 12 ms pre-roll still exists — inside the :45 insert.
+
+The lead-in hands over 12 ms before the first attack; the join's background
+steps UP ~22 dB (room tone → ringing minim), which the broadband attack
+masks — the same state every real change-to-change transition in the source
+is heard in. Contract-tested: the join may never cliff DOWN.
+
+### Verification numbers (v1.2.1)
+
+`tools/audio_test.py` (now 17 cases) replaces :15's slice-reassembly
+provenance with the stronger identity chain — lead-in ↔ source room tone,
+note region ↔ :45 tail (itself source-verified) — and adds:
+
+- q15 ↔ q45 tail contract: every note correlates ≥ 0.9918 (m4a) /
+  ≥ 0.9988 (ogg) with :45's change-1 tail within ±20 ms codec lag; gain
+  deltas ≤ 0.05 dB. Length = lead-in + tail (decoded AAC priming bounded
+  at 25 ms; sample-exact in the build's PCM).
+- Lead-in contract: fade-in present (early window ≥ 8 dB below settled),
+  settled −39…−40 dBFS rms (bounds −46…−32), no 50 ms digital-zero stretch
+  (quietest window peak 1.3e-3), lead-in correlates 0.998 with the source
+  room window, join step bounded (no down-cliff).
+- q45 untouched: m4a rebuilds byte-identical; the ogg re-mux differs only
+  in container bytes and decodes bit-identical (max |Δ| = 0.0) — the
+  approved HEAD bytes are kept in the repo.
+
 ## Shipped cuts (same source for AAC and Vorbis)
 
 | base name | source window | content |
 |---|---|---|
 | `melody` | 0.25–21.05 | intact 16-note hour chime and natural tonic decay, 20.80 s |
 | `q30` | 0.25–7.48 | intact changes 2+3, 8 notes, 7.23 s |
-| `q15` | assembled (see above) | change 1 at the measured rhythm, 3.44 s |
+| `q15` | 0.30 s room-tone lead-in + cut of the approved `q45` (6.558 s → end) | change 1 = the approved :45 change-1 tail, 3.79 s |
 | `q45` | 7.50–14.47 + q15 | intact changes 4+5 with minim + joined change 1, 10.05 s |
 | `bong` | 41.47–44.90 | one hour strike and decay, 3.43 s |
 
@@ -273,7 +320,8 @@ STOP); three real touch slider drags; boot with saved auto ON, all four auto
 marks, stale marks, STOP/races, mute persistence, portrait 390x844 and
 375px, landscape and desktop; picker overlay translucent (photo visible)
 and landscape-safe. Verify offline reload, real decoded audio currentTime
-progression, cache upgrade v1.1.0 → v1.2.0 and no external requests. A
+progression, cache upgrade from the previous release (v1.2.0 → v1.2.1) and
+no external requests. A
 headless play spy is NOT an audible listening test — Martin's phone listen
 is the final acceptance.
 

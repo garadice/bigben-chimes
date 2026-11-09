@@ -3,8 +3,8 @@
  * Sound model v1.2 (see docs/DEV.md for the evidence behind every number):
  *   audio/melody.m4a — complete recorded 16-note hour chime, 20.80 s.
  *   audio/q30.m4a    — recorded changes 2+3 (8 notes), 7.23 s.
- *   audio/q15.m4a    — change 1 (4 notes) assembled OFFLINE from the same
- *                      recording at its own measured rhythm, 3.44 s.
+ *   audio/q15.m4a    — change 1 (4 notes): the approved :45's change-1
+ *                      tail plus a natural room-tone lead-in, 3.79 s.
  *   audio/q45.m4a    — recorded changes 4+5 + the assembled change 1,
  *                      joined at the measured change gap, 10.05 s.
  *   audio/bong.m4a   — one hour strike + natural decay, 3.43 s.

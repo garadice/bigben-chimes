@@ -6,18 +6,25 @@ Usage: python3 tools/cut_audio.py /path/to/source-1945.wav
 The original must match the declared Commons source hash. No downloading.
 
 v1.2.0 rebuild (card t_a03d86fe, path b — see docs/DEV.md for the evidence):
-  q15 = change 1 (G#4 F#4 E4 B3) assembled OFFLINE from the recording's
-        change 2 performance (all four bells in one short source span),
-        tails ringing under the next attack at the performance's own measured
-        rhythm, phrase-final tail dissolving into real room tone.
-  q45 = recorded changes 4+5 (former q45a content) + that same change 1,
-        joined at the measured change-to-change attack gap with the tonic
-        minim ringing underneath, exactly like the real transitions.
+  q45 = recorded changes 4+5 (former q45a content) + change 1
+        (G#4 F#4 E4 B3) assembled OFFLINE from the recording's change 2
+        performance, tails ringing under the next attack at the
+        performance's own measured rhythm, phrase-final tail dissolving
+        into real room tone.
+v1.2.1 fix (card t_b53e4621): the standalone q15 is no longer a separate
+  assembly. Martin approved :45 but still rejected :15; measured, the only
+  difference in the change-1 material itself is its CONTEXT — in q45 the
+  first G# rises out of the ringing tonic minim (-17.4 dBFS rms), while the
+  old q15 started it from 12 ms of room tone after digital silence. So the
+  shipped q15 is now CUT FROM THE APPROVED q45: its final change-1 phrase
+  (notes, envelopes and room-tone dissolve, measurement-identical) plus a
+  300 ms natural room-tone lead-in with a gentle fade-in. See
+  build_q15_from_q45 and docs/DEV.md.
 The former per-note slices (audio/n-*) are no longer shipped: runtime
 stitching by JS timers could not overlap tails or match levels, and the
 v1.1.0 build audibly flattened note levels, clipped decays and used a
 mechanical 0.7 s grid. A phone-listen comparison against the contiguous
-q30 drove this rebuild (docs/DEV.md has the numbers).
+q30 drove the v1.2.0 rebuild (docs/DEV.md has the numbers).
 """
 import hashlib
 import re
@@ -55,9 +62,13 @@ STEPS = (0.663, 0.647, 0.553)
 # Change-to-change attack gaps 1.45 / 1.28 / 1.41 -> mean
 CHANGE_GAP = 1.380
 
-# Slice windows into the source, derived from the attack map:
+# Slice windows into the source for the change-1 INSERT inside q45, derived
+# from the attack map:
 #   pre-roll keeps room tone or the PREVIOUS note's tail (correct note);
 #   the phrase-initial G# takes 12 ms only, so no foreign tail bleeds in.
+# v1.2.1: this assembly now exists ONLY inside q45 (where Martin approved
+# it). The standalone q15 is cut from the finished q45 — see
+# build_q15_from_q45 below; it never starts at this 12 ms point anymore.
 Q15_SLICES = [
     # (source start, source end, pre-roll before its attack)
     (ATTACKS['G#'][0] - 0.012, ATTACKS['F#'][0] - 0.015, 0.012),  # G# rings until F#
@@ -72,6 +83,9 @@ Q45_BASE = (7.50, ATTACKS['E'][4] + CHANGE_GAP + 0.40)
 TARGET_DBFS = -3.0
 FADE_IN_S, FADE_OUT_S = 0.008, 0.080
 ROOM_DISSOLVE_S = 0.45
+# v1.2.1: room-tone lead-in prepended to the standalone q15 (cut of the
+# approved q45 tail). Mid-range of the card's ~150-400 ms window.
+LEAD_IN_S = 0.300
 
 
 def decode_stereo(path):
@@ -115,8 +129,13 @@ def quietest_room_window(mono, lo_s=18.5, hi_s=21.0, win_s=1.0):
     return best_a / SR
 
 
-def build_q15(src, mono, normalize=True):
-    """Change 1 (G# F# E B) at the measured rhythm, overlap-added."""
+def build_change1_insert(src, mono):
+    """Change 1 (G# F# E B) at the measured rhythm, overlap-added.
+
+    v1.2.1: this is the change-1 material INSERTED INTO q45 at source level
+    (kept until the whole q45 phrase is normalized once). It is no longer
+    the shipped :15 — build_q15_from_q45 derives that from the finished q45.
+    """
     g_at, f_at = ATTACKS['G#'][0], ATTACKS['F#'][0]
     e_at, b_at = ATTACKS['E'][0], ATTACKS['B'][0]
     cuts = [zc_time(mono, end) for _s, end, _p in Q15_SLICES]
@@ -144,12 +163,35 @@ def build_q15(src, mono, normalize=True):
     room_tail = int(0.15 * SR)
     buf[b_end_idx:b_end_idx + room_tail] = src[room_a + n:room_a + n + room_tail]
     buf = buf[:b_end_idx + room_tail]
-    # The raw version is also inserted into q45: taper before its own end,
-    # rather than relying on q45's later file-end fade over extra padding.
+    # The insert's end sits INSIDE q45: taper it there, rather than relying
+    # on q45's later file-end fade over extra padding.
     nf = int(FADE_OUT_S * SR)
     buf[-nf:] *= np.linspace(1, 0, nf)[:, None]
     # Keep the insert at source level until the WHOLE q45 phrase is mixed.
-    return (finalize(buf) if normalize else buf), positions
+    return buf, positions
+
+
+def build_q15_from_q45(q45, q15_at, src, mono):
+    """v1.2.1: the standalone :15 IS the approved :45's change-1 tail.
+
+    Martin approved q45; its final four notes — with the tonic minim ringing
+    underneath and the room-tone dissolve — are the reference his ear
+    accepted. Cut that region verbatim from the finished, normalized q45
+    buffer (measurement-identical notes; q45 itself is untouched), then
+    prepend the 1945 recording's own room tone with a gentle fade-in, so the
+    track opens like a live broadcast instead of striking out of digital
+    silence. No renormalization: the peak stays q45's -3 dBFS and every
+    sample after the lead-in is the approved audio, sample for sample.
+    """
+    # finalize()'s exact factor, recomputed from the finished buffer.
+    g = (10 ** (TARGET_DBFS / 20)) / float(np.abs(q45).max())
+    lead_n = int(LEAD_IN_S * SR)
+    room_a = int(quietest_room_window(mono) * SR)
+    # sin^2 ramp: settles onto full ambience with zero slope at the join.
+    ramp = np.sin(np.linspace(0.0, np.pi / 2, lead_n))[:, None] ** 2
+    lead = src[room_a:room_a + lead_n] * (g * ramp)
+    tail = q45[int(q15_at * SR):].copy()
+    return np.concatenate([lead, tail])
 
 
 def build_q45(src, mono, q15_buf):
@@ -212,18 +254,20 @@ def main():
 
     src = decode_stereo(source)
     mono = src.mean(axis=1)
-    q15_raw, positions = build_q15(src, mono, normalize=False)
-    q45, q15_at = build_q45(src, mono, q15_raw)
-    q15 = finalize(q15_raw)
+    insert_raw, positions = build_change1_insert(src, mono)
+    q45, q15_at = build_q45(src, mono, insert_raw)
+    q15 = build_q15_from_q45(q45, q15_at, src, mono)
     wavio.write(str(out / 'q15.wav'), SR, q15.astype(np.float32))
     wavio.write(str(out / 'q45.wav'), SR, q45.astype(np.float32))
     encode(out / 'q15.wav', out / 'q15')
     encode(out / 'q45.wav', out / 'q45')
     (out / 'q15.wav').unlink()
     (out / 'q45.wav').unlink()
-    print(f'q15: {len(q15)/SR:.2f}s, attacks at {"/".join(f"{p:.2f}" for p in positions)}')
     print(f'q45: {len(q45)/SR:.2f}s, change 1 joined at {q15_at:.2f}s '
           f'(attack-to-attack {CHANGE_GAP:.2f}s)')
+    print(f'q15: {len(q15)/SR:.2f}s = {LEAD_IN_S:.2f}s room-tone lead-in + '
+          f'the approved q45 change-1 tail from {q15_at:.2f}s '
+          f'(attacks at {"/".join(f"{LEAD_IN_S + p:.2f}" for p in positions)})')
     print('Removed assets (delete from audio/ if still present): q45a.*, n-gs4.*, '
           'n-fs4.*, n-e4.*, n-b3.*')
 

@@ -31,15 +31,19 @@ All assets, including the hour strike, target −3 dBFS before encoding.
 |---|---|---|
 | `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | source 0.25–21.05 s |
 | `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | source 0.25–7.48 s |
-| `q15.*` | **change 1 (G#4 F#4 E4 B3) assembled from the recording's change-2 performance** — four genuine attacks with full decay tails, overlap-added at the performance's own measured rhythm (0.663/0.647/0.553 s), the final tail dissolving into the hall's real room tone, 3.44 s | source slices 1.398–2.255, 2.17–2.945, 0.25–1.395, 2.94–4.39 s |
-| `q45.*` | **recorded changes 4+5 joined to the assembled change 1** at the measured change-to-change gap (1.38 s), tonic minim ringing underneath, 10.05 s | source 7.50–14.47 s + `q15` |
+| `q15.*` | **change 1 (G#4 F#4 E4 B3) = the approved :45's change-1 tail plus a natural room-tone lead-in** — four genuine attacks with full decay tails and the room-tone dissolve, cut verbatim from the finished `q45` asset, preceded by 300 ms of the hall's real room tone fading in, 3.79 s | `q45` cut 6.558 s → end + room tone at 19.95 s of the source |
+| `q45.*` | **recorded changes 4+5 joined to the assembled change 1** at the measured change-to-change gap (1.38 s), tonic minim ringing underneath, 10.05 s | source 7.50–14.47 s + change-1 slices 1.398–2.255, 2.17–2.945, 0.25–1.395, 2.94–4.39 s |
 | `bong.*` | ONE hour strike + natural decay, 3.43 s | source 41.47–44.90 s |
 
 The broadcast does not contain change 1, so the quarter-past and
-quarter-to phrases cannot be cut contiguously from it. v1.2.0 assembles
+quarter-to phrases cannot be cut contiguously from it. v1.2.0 assembled
 them offline (`tools/cut_audio.py`, numpy/scipy) instead of stitching
 per-note slices at runtime: sample-accurate measured rhythm, tails ringing
 under the next attack, natural note levels, no per-slice normalization.
+Since v1.2.1 the quarter-past asset is no longer a separate assembly: it is
+CUT from the finished quarter-to asset (which Martin approved on his phone)
+and opens with the recording's own room tone, so both quarters carry the
+identical change-1 material.
 Why the assembly is seamless (provenance correlations, fingerprint-band
 pitch verification, envelope A/B against the contiguous `q30`) is
 documented in `docs/DEV.md`. Nothing is synthesized; every sample traces
