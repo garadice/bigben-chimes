@@ -9,7 +9,7 @@ const path=require('node:path');
 function harness(headers={}) {
  const handlers={};const stores=new Map();const requests=[];
  const origin='https://example.test';
- const key='bigben-chimes-v1.2.1';
+ const key='bigben-chimes-v1.2.2';
  const cache={
   match:async req=>new Response('0123456789',{headers}),
   put:async()=>{},addAll:async()=>{}
@@ -32,7 +32,7 @@ test('cached shell hits do not make background network requests',async()=>{
  assert.equal(h.requests.length,0);
 });
 test('activation removes only this app\'s obsolete caches',async()=>{
- const h=harness();h.stores.set('bigben-chimes-v1.0.1',h.cache);h.stores.set('another-app-v3',h.cache);
+ const h=harness();h.stores.set('bigben-chimes-v1.0.1',h.cache);h.stores.set('bigben-chimes-v1.2.1',h.cache);h.stores.set('another-app-v3',h.cache);
  await h.activate();
  assert.deepEqual([...h.stores.keys()],[h.key,'another-app-v3']);
 });

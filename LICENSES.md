@@ -31,8 +31,8 @@ All assets, including the hour strike, target −3 dBFS before encoding.
 |---|---|---|
 | `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | source 0.25–21.05 s |
 | `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | source 0.25–7.48 s |
-| `q15.*` | **change 1 (G#4 F#4 E4 B3) = the approved :45's change-1 tail plus a natural room-tone lead-in** — four genuine attacks with full decay tails and the room-tone dissolve, cut verbatim from the finished `q45` asset, preceded by 300 ms of the hall's real room tone fading in, 3.79 s | `q45` cut 6.558 s → end + room tone at 19.95 s of the source |
-| `q45.*` | **recorded changes 4+5 joined to the assembled change 1** at the measured change-to-change gap (1.38 s), tonic minim ringing underneath, 10.05 s | source 7.50–14.47 s + change-1 slices 1.398–2.255, 2.17–2.945, 0.25–1.395, 2.94–4.39 s |
+| `q15.*` | **change 1 (G#4 F#4 E4 B3)** — four real source-note cuts, cleaner opening G#, 300 ms quiet natural room-tone lead-in and final room-tone dissolve, 3.753854 s before codec padding. Not a cut of the q45 base | source-note windows 7.598–8.195, 2.170–2.945, 0.250–1.395, 2.940–4.390 s + room tone at 19.95 s |
+| `q45.*` | **recorded changes 4+5 joined to the assembled change 1**, correctly twelve notes, at the measured 1.38 s attack gap; the original E keeps ringing underneath, 10.061854 s before codec padding | source 7.50–14.47 s + the same four change-1 source-note cuts; insert begins at asset time 6.558 s |
 | `bong.*` | ONE hour strike + natural decay, 3.43 s | source 41.47–44.90 s |
 
 The broadcast does not contain change 1, so the quarter-past and
@@ -40,15 +40,16 @@ quarter-to phrases cannot be cut contiguously from it. v1.2.0 assembled
 them offline (`tools/cut_audio.py`, numpy/scipy) instead of stitching
 per-note slices at runtime: sample-accurate measured rhythm, tails ringing
 under the next attack, natural note levels, no per-slice normalization.
-Since v1.2.1 the quarter-past asset is no longer a separate assembly: it is
-CUT from the finished quarter-to asset (which Martin approved on his phone)
-and opens with the recording's own room tone, so both quarters carry the
-identical change-1 material.
-Why the assembly is seamless (provenance correlations, fingerprint-band
-pitch verification, envelope A/B against the contiguous `q30`) is
-documented in `docs/DEV.md`. Nothing is synthesized; every sample traces
-to the one PD recording. The former per-note slice assets (`n-*`) and the
-`q45a` chunk were removed in v1.2.0.
+v1.2.1 copied :45's ending into :15 under an approval that Martin later
+retracted; both sounded wrong. v1.2.2 instead shares the raw source-note
+insert and preserves the original base E only in :45. The old opening G#
+slice carried a loud E decay: it is replaced with the cleaner G# recorded
+at 7.61 s. No note synthesis, pitch-shifting, time-stretching or other audio
+source is used. `docs/DEV.md` documents the independent score check,
+source provenance, decoded spectra, rhythm and before/after measurements.
+Those checks do not establish an audible phone-listen approval; Martin's
+ear remains the final acceptance. The former runtime note assets (`n-*`)
+and `q45a` chunk were removed in v1.2.0.
 
 ## Photo — `photo/bigben.jpg`
 

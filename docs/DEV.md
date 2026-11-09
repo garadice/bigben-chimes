@@ -1,335 +1,259 @@
 # Big Ben Chimes — developer notes
 
-Static HTML/CSS/JS; no build, dependencies, trackers, external fonts, or
-runtime API calls. Serve the repository as-is. The service worker precaches
+Static HTML/CSS/JS; no build, runtime dependencies, trackers, external fonts,
+or runtime API calls. Serve the repository as-is. The service worker caches
 all local photo/audio/icon/shell files. Keep `CACHE` different from the last
-**published** release; this unpublished release is `bigben-chimes-v1.2.1`.
+**published** release. This local candidate is `bigben-chimes-v1.2.2`;
+push/deploy belongs to main after the independent verifier gate.
 
-## Files
+## v1.2.2 diagnosis: correct scheme, contaminated first note
 
-- `chime.js`: pure timelines, quarter keys, hour counts and scheduler.
-  v1.2 adds `melodyOnlyEvents()` (the :00 button) and `hourPickerEvents(n)`
-  (the hour picker: melody + exactly N strikes).
-- `app.js`: gesture unlock, playback pool, cancellation, state, clock,
-  feedback, hour picker overlay and the armed badge.
-- `styles.css` / `index.html`: phone-first photo, right-edge controls,
-  translucent picker overlay.
-- `manifest.json` / `sw.js`: installed shell and offline media byte ranges.
-- `LICENSES.md`: source and license for every non-code asset.
-- `tools/chime_test.js`: timeline/scheduler logic checks.
-- `tools/app_test.js`: real app wiring with deterministic audio/DOM doubles.
-- `tools/audio_contract_test.js`: recording/timeline regression contracts.
-- `tools/cut_audio.py`: reproducible cuts AND the v1.2 offline phrase
-  assembly; Python stdlib + numpy/scipy + ffmpeg, dev-only.
-- `tools/audio_test.py`: decoded stereo/provenance/pitch fingerprint checks
-  + strike measurement; dev-only numpy/scipy + ffmpeg. No Python is needed
-  to run the app.
+Martin retracted the earlier approval of :45: **both :15 and :45 sound wrong**.
+The v1.2.1 "cold-start context" explanation is superseded, not confirmed.
+Neither provenance correlation nor a smooth waveform proved musical correctness.
 
-## v1.2.0 — why :15 and :45 were rebuilt, and how
+### Canonical score — independently re-derived
 
-Martin's phone listen on v1.1.0: :30 and :00 "sound right", :15 and :45
-"don't". The v1.1.0 evidence explains it: :30 (`q30`) and :00 (`melody`) are
-**contiguous chunks of the 1945 recording**, while :15 was four
-individually-stitched note slices played by JS timers and :45 appended the
-same stitching to a contiguous chunk. Measured defects of the v1.1.0 build:
+Live sources checked during this diagnosis:
 
-1. **Per-slice normalization**: every slice peaked at −1.1 dBFS, flattening
-   the performance's natural note-loudness relationships.
-2. **Decay cliffs between notes**: −5…−10 dB envelope jumps per 20 ms at
-   slice ends where the source has continuous tails.
-3. **Mechanical grid**: notes at 0/0.7/1.4/2.1 s against the performance's
-   own measured steps (0.66/0.65/0.55 s per position, see below).
-4. **No tail overlap**: in the recording each tail rings ~0.7 s *under* the
-   next attack; separate `<audio>` elements started by timers cannot
-   reproduce that, and hard-started notes add timing jitter.
-
-### Path (a) — new source search (2026-11-08, negative)
-
-Re-searched Wikimedia Commons for a PD/CC0 Big Ben recording containing
-change 1 (G#4 F#4 E4 B3) as a contiguous performance. Method: Commons search
-API (`Big Ben chimes/quarter/bell sound/bong/strikes/audio/New Year/1934/
-BBC broadcast/...`), the `Category:Big Ben` / `Westminster Quarters` /
-`Westminster chimes` / `Clock Tower, Palace of Westminster` category trees
-(no audio members, no subcategories), and the media lists of the English
-Wikipedia articles *Big Ben* and *Westminster Quarters*. Every audio hit was
-checked with license metadata:
-
-- `Westminster chimes (1 January 1945).wav` — the current source; contains
-  changes 2–5 only (0.35–12.76 s) then hour strikes. No change 1.
-- `Big Ben recorded in 1890.ogg` (PD, Edison cylinder) — re-verified with
-  fresh measurements: ~11 dB usable dynamic range (surface noise p10 −19.7
-  vs p90 −8.3 dBFS), 94 spurious crackle onsets, pitch analysis collapses
-  onto resonance/noise (219.7 Hz repeated). Cannot sit next to the clean
-  1945 audio without a jarring seam. Rejected.
-- `Westminster-and-one-o-clock.ogg` — a Kieninger mantel-clock **rod gong**,
-  not Big Ben (and unchanged weak provenance). Rejected.
-- `WestminsterMetrikx3.ogg` (CC BY-SA 3.0) — musicological metric
-  demonstration, not a Big Ben performance. Rejected.
-- `Carillon de Westminster Vierne MFlierl.ogg` — Vierne's organ composition.
-  Not Big Ben. Rejected.
-- `WWS GampFCopetowerclock.ogg` — a 1911 G&F Cope museum tower clock
-  mechanism (Gdańsk), not Big Ben's bells. Rejected.
-- `Gary O'Donoghue on the Elizabeth Tower.ogg` — spoken audio description.
-  Rejected.
-- MIDI files (`Westminster Quarters.mid`, `Westminster-chimes.mid`) —
-  synthesized; rejected on principle (the product is REAL Big Ben).
-
-**Verdict: this search found no usable contiguous change-1 recording → path (b).**
-
-### Path (b) — the offline rebuild (shipped)
-
-`tools/cut_audio.py` now assembles the two missing-sounding quarters
-OFFLINE at the sample level, all from the same 1945 recording:
-
-- `q15` (3.44 s) = change 1 (G#4 F#4 E4 B3) assembled from the recording's
-  **change 2 performance** (0.35 E, 1.41 G#, 2.27 F#, 2.96 B — the chosen
-  all-four-bell material; one 4-second span also means one
-  speed-drift state, so pitches stay mutually consistent).
-- `q45` (10.05 s) = the recorded changes 4+5 (former `q45a` window,
-  7.50–14.05 s, extended so the tonic minim keeps ringing) + `q15` joined
-  at the **measured change-to-change attack gap** (1.45/1.28/1.41 s →
-  mean 1.38 s), i.e. the E minim rings underneath change 1's first attack
-  exactly like the real transitions in the source.
-
-Engineering decisions (all evidenced, documented in the code):
-
-- **Rhythm**: per-position mean steps of the steady changes 3–5:
-  0.663 / 0.647 / 0.553 s (change 2's 1.06 s first step is the
-  broadcast-start rubato outlier). No mechanical grid.
-- **Overlap-add**: each slice keeps its full natural decay so the tail
-  rings under the next attack — the defining texture of the source.
-- **Cuts at zero crossings** just before the next attack, with an 80 ms
-  outgoing fade in BOTH stereo channels while the next note rings. A zero
-  crossing of the channel mean is not necessarily zero in either channel.
-- **Phrase-initial G# keeps only 12 ms of lead-in** (zero-crossing +
-  3 ms fade): a longer lead-in would leak the E-bell tail (≈ −9 dB after
-  phrase gain) into the start of :15.
-- **Phrase-final B3** is the one exposed cut (its tail is still at
-  −22.6 dBFS after 1.4 s — bells decay slowly). It dissolves into the
-  hall's real room tone (quietest 1 s window of the ring-out region,
-  19.95 s, −38.6 dBFS) via a 450 ms equal-power crossfade: the decay
-  continues into the noise floor. The SAME room window continues for the
-  final 150 ms and fades to zero; no silent pad interrupts the dissolve.
-- **One phrase-level gain** to −3 dBFS peak; no per-slice normalization.
-  q45 mixes the UNNORMALIZED q15 assembly with its source-level base and
-  normalizes the complete result once, preserving source loudness relationships.
-  Fades: 8 ms in,
-  80 ms out (same convention as every shipped asset).
-
-### Verification numbers (2026-11-08)
-
-`tools/audio_test.py` (15 cases) adds to the v1.1.0 contracts:
-
-- Provenance: q15's four individual note windows correlate ≥ 0.994 with
-  the hash-verified source in both codecs; q45's base correlates 0.9996.
-  The first joined G# correlates ≥ 0.999 after subtracting the ringing base.
-- Pitch classes per note via the DEV.md fingerprint bands (E≈1051,
-  G#≈900, F#≈1197, B≈1393 Hz NEW band energy). The first G# is source-pitch
-  checked and waveform-matched; for q45 subtract the known ringing base
-  before matching it. At honest source levels that E decay's B-band partial
-  can beat the new G# band: a loudest-band classifier alone is insufficient.
-  Full-spectrum comparison against a separate B attack confirms source B
-  notes at 2.96 and 10.90 s despite ambiguous single-band flux.
-- q45 source-gain regression: the initial v1.2 build boosted change 1 by
-  7.83 dB relative to its base. Corrected mix agrees within 0.05 dB.
-- Actual room-tone splice regression (q15 3.292 s; q45 9.850 s): the initial
-  build dropped ~25 dB per 20 ms into zero padding. Continued room tone
-  removes that cliff (about −2 dB measured drop, i.e. a slight rise).
-- A/B vs the "sounds right" `q30`: worst inter-attack envelope move
-  q15 2.5 dB/20 ms vs q30 3.0 dB/20 ms — the assembled phrase is at least
-  as smooth as the contiguous reference (contract-tested).
-
-These are waveform/provenance checks, NOT an audible phone-listen verdict.
-The per-note slice assets (`n-*`) and the `q45a` chunk are retired; the
-service worker no longer precaches them.
-
-## v1.2.1 — :15 rebuilt from the approved :45 (2026-11-09)
-
-Martin's second phone listen approved :45 but still rejected :15. The
-diagnosis held: the change-1 material itself passes his ear inside :45, so
-:15's remaining problem is how it STARTS. Measured on the v1.2.0 assets:
-
-- The old :15's first G# rose out of 12 ms of room tone after digital
-  silence; in :45 the same G# rises out of the ringing tonic minim
-  (−17.4 dBFS rms vs −38.6 dBFS source room tone — a ~21 dB difference in
-  the hand-over ambience).
-- Instance/gain identity was already correct: :15's F#/E/B notes matched
-  :45's tail at 0.00 dB gain delta (corr ≥ 0.996). Only the first note's
-  window correlated poorly (0.63) — its CONTEXT differed, not its level.
-
-So the standalone `q15` is no longer its own assembly. `tools/cut_audio.py`
-builds the change-1 insert only inside `q45` (unchanged recipe, frozen) and
-cuts the finished, normalized :45 at the insert boundary (6.558 s): the
-final four notes with their envelopes and the room-tone dissolve his ear
-approved, sample for sample. Prepended: the 1945 recording's own room tone
-(the quietest 1 s ring-out window, 19.95 s — the same window the dissolve
-continues), 300 ms, sin² fade-in to full ambience at the asset's gain.
-No renormalization: nothing after the lead-in differs from :45, and the
-v1.2.0 phrase-initial 12 ms pre-roll still exists — inside the :45 insert.
-
-The lead-in hands over 12 ms before the first attack; the join's background
-steps UP ~22 dB (room tone → ringing minim), which the broadband attack
-masks — the same state every real change-to-change transition in the source
-is heard in. Contract-tested: the join may never cliff DOWN.
-
-### Verification numbers (v1.2.1)
-
-`tools/audio_test.py` (now 17 cases) replaces :15's slice-reassembly
-provenance with the stronger identity chain — lead-in ↔ source room tone,
-note region ↔ :45 tail (itself source-verified) — and adds:
-
-- q15 ↔ q45 tail contract: every note correlates ≥ 0.9918 (m4a) /
-  ≥ 0.9988 (ogg) with :45's change-1 tail within ±20 ms codec lag; gain
-  deltas ≤ 0.05 dB. Length = lead-in + tail (decoded AAC priming bounded
-  at 25 ms; sample-exact in the build's PCM).
-- Lead-in contract: fade-in present (early window ≥ 8 dB below settled),
-  settled −39…−40 dBFS rms (bounds −46…−32), no 50 ms digital-zero stretch
-  (quietest window peak 1.3e-3), lead-in correlates 0.998 with the source
-  room window, join step bounded (no down-cliff).
-- q45 untouched: m4a rebuilds byte-identical; the ogg re-mux differs only
-  in container bytes and decodes bit-identical (max |Δ| = 0.0) — the
-  approved HEAD bytes are kept in the repo.
-
-## Shipped cuts (same source for AAC and Vorbis)
-
-| base name | source window | content |
-|---|---|---|
-| `melody` | 0.25–21.05 | intact 16-note hour chime and natural tonic decay, 20.80 s |
-| `q30` | 0.25–7.48 | intact changes 2+3, 8 notes, 7.23 s |
-| `q15` | 0.30 s room-tone lead-in + cut of the approved `q45` (6.558 s → end) | change 1 = the approved :45 change-1 tail, 3.79 s |
-| `q45` | 7.50–14.47 + q15 | intact changes 4+5 with minim + joined change 1, 10.05 s |
-| `bong` | 41.47–44.90 | one hour strike and decay, 3.43 s |
-
-## Source recording and slicing map
-
-The only audio source is the public-domain Radio Oranje New Year broadcast:
-<https://commons.wikimedia.org/wiki/File:Westminster_chimes_(1_January_1945).wav>
-
-Original WAV: 72.395521 s, 48 kHz stereo PCM; SHA-256:
-`9e6163c1a485b17829eb69cb58b0f187d4d9e690be26a224d7e6568b24d29e70`.
-The original is not shipped. `tools/cut_audio.py` refuses a different source.
-
-The canonical pattern is documented at:
-<https://en.wikipedia.org/wiki/Westminster_Quarters#Description>
+- [Wikipedia, Westminster Quarters — Description](https://en.wikipedia.org/wiki/Westminster_Quarters#Description)
+  explicitly gives the five changes and their quarter-hour assignments.
+- [Daniel Harrison, *Tolling Time*, Music Theory Online 6.4 (2000), paragraph 16](https://www.mtosmt.org/issues/mto.00.6.4/mto.00.6.4.harrison.html)
+  independently transcribes **4 / 8 / 12 / 16 notes**. Harrison is a university
+  carilloneur; his notation is transposed into C. Mapping C/E/D/G to
+  E/G#/F#/B gives the same note orders below. This is a sequence check,
+  not an absolute-pitch or performance-tempo reference.
+- [Classic FM's reproduced score](https://www.classicfm.com/discover-music/what-tune-does-big-ben-chime/)
+  was also visually inspected: the third quarter has three four-note phrases.
+- [UK Parliament, The Great Bell and the quarter bells](https://www.parliament.uk/about/living-heritage/building/palace/big-ben/facts-figures/great-bell/)
+  confirms the four bell names/pitches: G sharp, F sharp, E, B.
 
 ```
-1: G# F# E B        2: E G# F# B        3: E F# G# E
-4: G# E F# B        5: B F# G# E
-:15 = 1     :30 = 2+3     :45 = 4+5+1     :00 = 2+3+4+5
+change 1: G#4 F#4 E4 B3
+change 2: E4 G#4 F#4 B3
+change 3: E4 F#4 G#4 E4
+change 4: G#4 E4 F#4 B3
+change 5: B3 F#4 G#4 E4
+
+:15 = 1           = 4 notes, ends B
+:30 = 2+3         = 8 notes, ends E
+:45 = 4+5+1       = 12 notes, ends B
+:00 = 2+3+4+5     = 16 notes, ends E
 ```
 
-Independent source attack map (seconds, approximate 10–50 ms resolution;
-cross-verified in the v1.1.0 review round — :30, built on these positions,
-is Martin's "sounds right" reference):
+**The proposed eight-note :45 hypothesis is false.** Removing change 1 would
+create a different bug. The existing documentation's scheme was correct;
+the assembled sound, not the number of phrases, needed fixing.
+
+### What the audio actually showed
+
+`tools/audio_scheme.py` does not import the build recipe. It fits four
+source-derived, multi-partial bell spectra to decoded audio, detects their
+fresh rises, and groups coincident partials into dominant attacks. It
+correctly transcribes the intact source hour and both frozen :30/:00 assets.
+The new contract was run **before** the audio edit and failed only :15/:45
+in both codecs: change 1's first dominant onset classified as **E**, not G#.
+A real G# was present, but the pasted E ringing masked its identity; this is
+not a claim that the original G# sample was the wrong physical bell.
+
+Two independent, visible defects explain that result:
+
+1. The old G# cut started at **1.398 s** in the source, while its new G#
+   partials rise around **1.44 s**. The cut copied a substantial preceding
+   E decay and re-started it as if it were part of a new note. Its E and G#
+   fingerprint bands were almost equally strong. The cleaner G# instance
+   at **7.61 s** has the E band about **10.8 dB below** G# instead.
+2. v1.2.1 cut standalone :15 from the finished :45 tail. That copied a
+   SECOND E decay — :45's naturally preceding recorded E — into the
+   opening of :15, turning continuous background into an abrupt onset.
+
+Decoded AAC, 40–290 ms after the nominal first change-1 attack:
+
+- Before: :15 G# minus E fingerprint energy **−1.30 dB**; :45 **−1.32 dB**.
+- After: :15 **+10.64 dB**; :45 **+4.25 dB**. The legitimate, continuous
+  base E remains under :45; it is not supposed to be absent there.
+- Vorbis independently gives :15 **−1.34 → +10.86 dB**, :45
+  **−1.36 → +4.35 dB**.
+- These are measurements at **900±20 / 1050±20 Hz**, NOT fundamentals.
+  Full-spectrum onset classification and waveform-source checks accompany
+  them; a band-energy ratio alone is not a listening verdict.
+
+The old tests checked the **source** for the first G#, rather than the
+first note actually heard in :15, and checked :15↔:45 agreement even though
+both contained the same defect. Those contracts could pass a wrong-sounding
+shared phrase. The first decoded note is now tested directly.
+
+### Why the plots do not invent 415/370/330/247 Hz fundamentals
+
+Those values are the score's equal-tempered G#4/F#4/E4/B3 reference pitches,
+not guaranteed spectral fundamentals of these inharmonic archival bells.
+For example, a source E attack has strong ~324 / 417 / 702 / 1051 Hz modes;
+the G# has ~387 / 531 / 899 / 1340 Hz modes. Calling the loud ~417 Hz E
+partial "G#" would misidentify the bell. No pitch-shifting was applied to
+force the source onto a modern concert-pitch grid.
+
+[Bill Hibbert's bell-acoustics explanation](https://www.hibberts.co.uk/building-a-bell-sound/)
+distinguishes partials from perceived strike pitch; the latter need not
+appear as one frequency in the spectrum. Therefore the PNGs mark nominal
+bell identities plus **measured low partials**, not fabricated fundamental
+estimates. The untouched source's complete melody anchors those identities.
+
+## Current build: real source-note cuts, no synthesis
+
+`tools/cut_audio.py` checks the original WAV hash, then builds one raw
+G#/F#/E/B insert from individual recorded notes:
+
+- G#: **7.598–8.195 s** nominal slice, attack 7.61 s — cleaner instance.
+- F#: **2.170–2.945 s**, attack 2.27 s; its source predecessor is G#.
+- E: **0.250–1.395 s**, attack 0.35 s — the clean initial source bell.
+- B: **2.940–4.390 s**, attack 2.96 s — longest available final-B decay.
+
+Cut ends move to nearby zero crossings; 80 ms outgoing fades act on BOTH
+stereo channels. These are real recorded attacks with residual room sound,
+not mathematically isolated tones. There is no note synthesis, looping,
+pitch-shifting, stretching, or runtime note scheduling.
+
+- Source-measured inter-onset gaps remain **0.663 / 0.647 / 0.553 s**,
+  from per-position means of changes 3–5; the source opening is slower.
+- Pre-roll is accounted for consistently: :15's nominal attacks are
+  **0.312 / 0.975 / 1.622 / 2.175 s**, not a first note offset from the grid.
+- `q15` = 300 ms natural room-tone lead-in + clean insert. It is **not**
+  cut from q45. The lead-in retains v1.2.1's quiet unity-gain ambience;
+  changing lead-in/gain is not the proposed musical cure.
+- `q45` = contiguous recorded changes 4+5, source **7.50–14.47 s**, plus
+  that same insert. The insert starts at **6.558 s** asset time, so its
+  first attack is **1.380 s** after the preceding E attack.
+- Notes in both assets share one source-to-asset gain (**+7.8742 dB**),
+  derived from the complete q45 mix, target peak −3 dBFS. No per-note gain.
+- Final B dissolves into the same real room-tone window over 450 ms, then
+  the room window continues into a 150 ms ending with an 80 ms fade.
+- :15 raw duration **3.753854 s**; :45 **10.061854 s**. Codec padding can
+  add a small duration difference to the decode.
+
+The recorded first two phrases of :45 remain sample-identical after decode
+in their unmodified interior: old/new correlation **1.0**, gain delta
+**0.0 dB**, both codecs, tested 0.2–6.3 s. Only its appended change is rebuilt.
+
+### Frozen scope
+
+SHA-256 contracts pin **all six** :30/:00/hour-strike encodings plus
+`app.js`, `chime.js`, `styles.css`, `index.html`, `manifest.json` to v1.2.1.
+No changes to picker, BONGY, auto-chime behavior, STOP, first-gesture unlock,
+layout, or the **4.015 s** strike interval. Only `q15.*` / `q45.*` audio and
+the service-worker release identity change at runtime.
+
+Use `--assembled-only` to avoid re-encoding frozen assets (Vorbis container
+serial numbers can otherwise change even with identical decoded samples):
 
 ```
-change 2:  0.35 E   1.41 G#   2.27 F#   2.96 B
-change 3:  4.41 E   5.10 F#   5.75 G#   6.33 E
-change 4:  7.61 G#  8.21 E    8.90 F#   9.49 B
-change 5: 10.90 B  11.60 F#  12.20 G#  12.69 E
+/usr/bin/python3 tools/cut_audio.py /path/to/source-1945.wav --assembled-only
 ```
 
-The E / G# / F# / B timbres have distinctive new-energy bands near
-1051 / 900 / 1197 / 1393 Hz respectively. These are fingerprints, not their
-fundamental pitches. Broadband clicks and slow beating can create false
-onset peaks; verify the accompanying fresh partials, not peak count alone.
-Do NOT identify a bell from its loudest single spectral peak or from
-harmonic-product spectra: the archive has inharmonic partials, reverberation
-and speed fluctuation.
+## Evidence and regression gates
 
-## v1.2.0 behavior changes
+Renders under `tools/analysis/` were actually viewed, including detailed
+crops, not merely generated:
 
-- **:00 button = melody ONLY.** The 🕛 square plays the 16-note recording
-  and schedules zero strikes (`melodyOnlyEvents`). No hidden bong path.
-- **Hour picker (new).** The 🔔 square (or a tap on the clock) opens a
-  translucent overlay — the photo stays visible behind — with big numbers
-  1–12. Pick a number, press the big ▶ button: the full 16-note melody
-  plays, then the Great Bell strikes the CHOSEN number of times at the
-  measured 4.015 s spacing. Nothing else in between. While playing, a
-  badge next to the clock shows the chosen hour (`🔔 N`); it clears after
-  the final strike's 3.43 s decay, on STOP, or when another button takes over.
-  Opening the overlay mid-chime leaves playback running, but its own red
-  STOP is always reachable. Keyboard focus stays inside; Escape closes it
-  and restores the opener. The clock is a real keyboard-operable button.
-- **Picker state decision**: the choice is CONSUMED on play and the
-  overlay closes; the next open starts with nothing selected (a stale
-  number must never strike unexpectedly). The choice is not persisted
-  across sessions. STOP discards an unfinished choice too. Number buttons
-  clamp to 1–12; nothing but the picker
-  reads the chosen hour (BONGY and auto-chime always use the real clock).
-- **Unchanged**: BONGY (current real hour, `(hour % 12) || 12`), KAŽDÚ
-  ŠTVRŤ auto-chime (per-quarter sequences — now with the FIXED sounds —
-  and melody + hour bongs on the real hour), boot re-arm persistence,
-  no mid-mark blast, STOP kills everything instantly (including picker
-  playback) and closes the overlay, first-tap unlock, mute/volume.
+- `source-hour-annotated.png`: all 16 source attacks, four phrase boundaries,
+  measured partials and canonical bell identities.
+- `v1.2.1-quarters-side-by-side.png`: before :15/:45/:30.
+- `v1.2.2-quarters-side-by-side.png`: after :15/:45/:30, 4/12/8 dominant
+  attacks, correct G#/F#/E/B in both assembled change-1 passages.
+- `zoom-source-first-Gs.png` / `zoom-q15-opening.png`: old cut/attack mismatch.
+- `*-measurements.json` / `release-metrics.json`: onsets, order, rhythm,
+  before/after energy, hashes and frozen-file comparisons.
 
-## Measured hour-strike spacing: 4.015 s
-
-Independent reproducible measurement is `tools/audio_test.py`:
-mono = average of the source channels; resample 48→8 kHz; STFT 1024-sample
-Hann windows, 80-sample hop; sum positive spectral-magnitude differences;
-find prominent peaks ≥3 seconds apart in the 20–69 s strike region.
+Reproduce the annotated current renders:
 
 ```
-onsets: 21.24 25.44 29.49 33.53 37.52 41.57 45.61 49.62 53.54 57.43 61.41 65.40
-11 gaps: 4.20 4.05 4.04 3.99 4.05 4.04 4.01 3.92 3.89 3.98 3.99
-mean: 4.014545454545455 s -> BONG_GAP = 4.015 s
+/usr/bin/python3 tools/audio_scheme.py /path/to/source-1945.wav --label v1.2.2
 ```
 
-`STRIKE_PAUSE = 0.6` is the explicit extra asset-end→strike delay, not an
-asserted historical fact. `BONGY` uses the same measured spacing. Bong
-count = `(hour % 12) || 12`, so midnight/noon both strike twelve times.
-
-## Auto-quarter and browser limits
-
-- Scheduler ticks every second, keying the actual local quarter mark.
-- Grace is 90 s; older missed marks are consumed silently, never queued.
-- Enabling during grace may sound the current mark; boot restoration uses
-  `setEnabledQuiet` to consume the current mark without a relaunch blast.
-- Saved ON state re-arms on boot; audio still needs a fresh real gesture
-  after a browser restart. Browser autoplay policy cannot be persisted.
-- Automatic marks before that first gesture are consumed quietly; enabling
-  auto as the first interaction waits for priming before it schedules audio.
-- Timers are not an alarm-clock guarantee: Android can suspend background
-  tabs or locked-screen PWAs. Keep the app open/foreground for reliable use.
-- STOP invalidates timers, pending unlock continuations and pending retries,
-  pauses every player, removes count/sway/armed badge, and closes the
-  picker overlay. It does not disable auto mode.
-- A cold first manual tap preserves the muted pointerdown priming sweep:
-  pausing it before media loads rejects native play() promises with
-  AbortError. STOP still pauses every player and cancels the pending tap.
-- A timeline event more than 1 s late cancels that old tune, so resuming a
-  suspended tab cannot dump queued strikes/notes together. This is distinct
-  from the scheduler's 90 s grace for starting a new quarter sequence.
-- Mute/volume/auto persist in local storage; unavailable storage is
-  non-fatal. The picker choice deliberately does NOT persist.
-- Reduced motion disables tower animation; vibration is optional/unsupported
-  on some devices. Neither unsupported vibration nor private storage breaks audio.
-
-## Verification and deployment
+Full gates (development dependencies only):
 
 ```
 node tools/chime_test.js
 node --test tools/app_test.js tools/audio_contract_test.js tools/sw_test.js
 /usr/bin/python3 tools/audio_test.py /path/to/source-1945.wav
-python3 tools/cut_audio.py /path/to/source-1945.wav  # only to regenerate
+/usr/bin/python3 tools/scheme_test.py /path/to/source-1945.wav
+PLAYWRIGHT_MODULE=/path/to/playwright BBC_EVIDENCE_DIR=/path/to/evidence node tools/browser_test.cjs
 ```
 
-Real-browser sweep: every button incl. the picker (open, pick, play, count,
-STOP); three real touch slider drags; boot with saved auto ON, all four auto
-marks, stale marks, STOP/races, mute persistence, portrait 390x844 and
-375px, landscape and desktop; picker overlay translucent (photo visible)
-and landscape-safe. Verify offline reload, real decoded audio currentTime
-progression, cache upgrade from the previous release (v1.2.0 → v1.2.1) and
-no external requests. A
-headless play spy is NOT an audible listening test — Martin's phone listen
-is the final acceptance.
+Verified results for this candidate:
 
-The browser suite now hit-tests every inventoried control, operates all
-12 picker numbers on all six viewports, plays a full chosen 12-strike
-timeline in real time, waits past :00's potential strike time, and delays
-native media responses for cold first taps (rather than delaying a promise
-which already resolved). All five asset types play offline in AAC and Vorbis.
+- Timeline/scheduler: **151 passed**.
+- App/timeline/cache contracts: **95 passed**.
+- Decoded stereo/provenance/gain/tail/strike tests: **17 passed**. Obsolete
+  :15=q45-tail identity is replaced by independent first-G# provenance and
+  shared F#/E/B identity. Existing quality thresholds are retained.
+- Independent scheme suite: **17 passed**, including all four quarters in
+  both codecs, all 16 source notes, wrong-order/missing/extra-note detector
+  fixtures, silence, actual first-note masking, source rhythm and frozen bytes.
+- Real Chrome: **473/473 checks** (468 existing + five upgrade checks).
+  Six viewports, 11 main controls + 15 picker controls each, every control
+  operated; all 12 picker hours; full real 12-strike playback; STOP and cold
+  unlock races; all five sound types offline in AAC and Vorbis.
+- Real v1.2.1→v1.2.2 cache upgrade waits for controllerchange/activated,
+  removes only old app caches, preserves an unrelated cache, checks all
+  21 release entries and exact SHA-256 bodies of all four changed audio files,
+  then exercises offline playback and cached byte ranges.
 
-Main owns push/deploy after independent verifier approval. This review
-makes local commits only. Re-verify the published app after any future deploy.
+These gates run against the **local unpushed candidate**, as required by
+the no-deploy instruction. They are not production v1.2.2 verification.
+Headless media progress, spectral classification and smooth decays do NOT
+prove phone-speaker sound quality. **Martin's phone listen after the verifier
+and main's deployment remains the final acceptance.**
+
+## Source recording and historical search
+
+All audio derives from the public-domain Radio Oranje New Year broadcast:
+<https://commons.wikimedia.org/wiki/File:Westminster_chimes_(1_January_1945).wav>
+
+Original: 72.395521 s, 48 kHz stereo PCM. SHA-256:
+`9e6163c1a485b17829eb69cb58b0f187d4d9e690be26a224d7e6568b24d29e70`.
+Original WAV is not shipped; unknown source hashes are refused.
+
+Contiguous assets remain:
+
+- `melody.*`: source 0.25–21.05 s, 20.80 s, changes 2+3+4+5.
+- `q30.*`: source 0.25–7.48 s, 7.23 s, changes 2+3.
+- `bong.*`: source 41.47–44.90 s, 3.43 s, one hour strike and decay.
+
+Source attack map (approximate hammer/partial onset, not detector peak centre):
+
+```
+change 2:  0.35 E   ~1.44 G#  2.27 F#   2.96 B
+change 3:  4.41 E    5.10 F# ~5.75 G#   6.33 E
+change 4:  7.61 G#   8.21 E   8.90 F#   9.49 B
+change 5: 10.90 B   11.60 F# 12.20 G#  12.69 E
+```
+
+The earlier Commons search found no **usable contiguous change 1**: the
+1945 recording contains changes 2–5 only; the 1890 cylinder was too noisy;
+the remaining hits were other instruments, music, speech, or synthesized
+MIDI. The detailed prior search ledger remains in `LICENSES.md`. This is a
+negative search result, not proof that no recording exists anywhere.
+
+Historical v1.1.0 defects included per-note normalization, hard slice ends,
+a mechanical 0.7 s grid and runtime stitching. v1.2.0 fixed those but kept
+the contaminated G# instance. v1.2.1 wrongly treated :45 as approved and
+copied its ending into :15. Both are superseded by the measured v1.2.2 fix.
+
+## Application behavior — unchanged
+
+- :00 button plays only the complete 16-note melody: no hour strikes.
+- Picker: choose 1–12, then PLAY gives melody + exactly that many strikes;
+  choice is consumed, badge lasts through final decay, STOP clears all.
+- BONGY and automatic hour strikes always use `(hour % 12) || 12` from
+  the real clock, never a picker choice. Midnight/noon strike twelve times.
+- `BONG_GAP = 4.015 s` is the measured mean source strike spacing.
+  `STRIKE_PAUSE = 0.6 s` is an explicit asset-end delay, not historical fact.
+- Scheduler has 90 s start grace, consumes older missed marks silently,
+  restores auto quietly, and never dumps stale events after suspension.
+- STOP invalidates pending unlocks/retries and pauses every player;
+  a normal cold manual tap preserves its own in-flight gesture priming.
+- Auto needs a fresh gesture after browser restart. Android may suspend
+  background/locked-screen tabs: foreground use is required for reliability.
+- Mute/volume/auto persist when storage permits. Picker choice never persists.
+- Service-worker caches are immutable per release; offline range requests
+  use decoded body length, not a missing/stale Content-Length header.
