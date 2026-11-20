@@ -14,11 +14,11 @@ test('the full-hour button plays the melody ONLY (zero strikes)',()=>{
 test('half past plays only the recorded changes 2+3 asset',()=>{
  assert.deepEqual(C.quarterEvents(2,3),[{file:'q30',at:0}]);
 });
-test('quarter past is the assembled change-1 asset, never slices or strikes',()=>{
+test('quarter past is the contiguous change-4 asset, never slices or strikes',()=>{
  const ev=C.quarterEvents(1,3);
  assert.deepEqual(ev,[{file:'q15',at:0}]);
 });
-test('quarter to is the joined changes-4+5+1 asset',()=>{
+test('quarter to is the contiguous changes-4+5 asset',()=>{
  assert.deepEqual(C.quarterEvents(3,3),[{file:'q45',at:0}]);
 });
 test('auto hour keeps the real behavior: melody AND the hour strikes',()=>{

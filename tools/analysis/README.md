@@ -1,114 +1,122 @@
-# v1.2.2 evidence guide
+# v1.3.0 evidence guide
 
-The local candidate removes a masked opening note in both assembled chimes; independent review and a phone listen remain necessary.
+The local candidate replaces both assembled quarters with pure contiguous
+cuts of the 1945 recording; independent review and Martin's phone listen
+remain necessary (round 5 = final acceptance).
 
-## DIAGNOSIS
+## DIAGNOSIS (round-4 listen verdict, 2026-11-20)
 
-The old first G# slice copied a loud preceding E decay before the G# attack;
-standalone :15 also copied the ringing E from :45's base. A G# was physically
-present, but the dominant opening sounded E-like in the spectral model.
-This is NOT the rejected "more lead-in fixes cold-start context" theory.
-The final build retains the original quiet 300ms lead-in.
+Martin's ear rejected every ASSEMBLED change-1 asset across four rounds
+(every :15 variant, :45's appended insert), while every CONTIGUOUS cut
+sounds right (:30, :00, :45's recorded base). v1.3.0 therefore abandons
+ALL assembled change-1 material — permanently.
 
-Actual pre-edit regression: `scheme_test.py` rejected q15 and q45 in both
-codecs at change 1's first note; intact q30 and melody passed. Post-edit,
-all four quarters in both codecs have the canonical dominant attack order.
+Actual pre-edit regression on the v1.2.2 candidate: `scheme_test.py`
+rejected q15 and q45 in both codecs at change 1's first note; intact q30
+and melody passed. Post-rebuild, all four quarters in both codecs match
+their v1.3.0 expected dominant attack order (4/8/8/16).
 
-AAC first-change G# versus E fingerprint-band energy:
+First v1.3.0 build measurement (documented so it is not reintroduced):
+cutting q15 from source 7.50 s (q45's window start) joins the room-tone
+lead-in into the middle of change 3's decaying tail — a sustained ~15 dB
+ambience step the independent detector transcribed as a spurious E onset
+(strength 0.0580 ≈ the real G#'s 0.0578), suppressing the genuine G# via
+coincidence grouping: detected [E, E, F#, B]. With the established
+12 ms pre-roll (source 7.598 s) and the 3 ms rise-from-zero de-click, the
+residual rises as part of the attack complex: [G#, E, F#, B], first-bell
+strength 0.0642.
 
-- :15: **−1.30 → +10.64dB**.
-- :45 appended phrase: **−1.32 → +4.25dB**; continuous preceding E is retained.
+Per-note fingerprint-band identity is NOT used for q45's notes: measured
+on this build, change 5's B (asset 3.40 s) re-strikes the same bell
+1.41 s after change 4's B, whose decay saturates the B band — the honest-
+level limitation the v1.2.2 diagnosis already documented. Note identity is
+asserted by whole-asset source provenance at one gain plus the independent
+full-spectrum detector in `scheme_test.py`.
 
-These numbers measure 900±20Hz / 1050±20Hz, not fundamental frequencies.
-Bells are inharmonic; plots show measured partials rather than inventing
-concert-pitch fundamentals. See [the bell-acoustics explanation](https://www.hibberts.co.uk/building-a-bell-sound/).
-`audio_scheme.py` matches fresh full-spectrum source timbres, not just these
-bands. It also correctly transcribes all 16 original source notes.
-
-## SCHEME
-
-The proposed eight-note :45 was disproved. Correct scheme:
+## SHIPPED SCHEME (v1.3.0)
 
 ```
-:15 = change 1       G# F# E B
-:30 = changes 2+3    E G# F# B | E F# G# E
-:45 = changes 4+5+1  G# E F# B | B F# G# E | G# F# E B
-:00 = changes 2–5    E G# F# B | E F# G# E | G# E F# B | B F# G# E
+:15 = change 4 (cut)    G# E F# B            4 notes
+:30 = changes 2+3       E G# F# B | E F# G# E   8 notes
+:45 = changes 4+5 (cut) G# E F# B | B F# G# E   8 notes
+:00 = changes 2–5       E G# F# B | E F# G# E | G# E F# B | B F# G# E   16 notes
 ```
 
-Sources checked live:
-
-- [Wikipedia Description](https://en.wikipedia.org/wiki/Westminster_Quarters#Description).
-- [Daniel Harrison, Society for Music Theory, paragraph 16](https://www.mtosmt.org/issues/mto.00.6.4/mto.00.6.4.harrison.html):
-  independent 4/8/12/16-note transcription in C; transposition to E matches.
-- [UK Parliament](https://www.parliament.uk/about/living-heritage/building/palace/big-ben/facts-figures/great-bell/): bell pitch names.
-- [Classic FM's score](https://www.classicfm.com/discover-music/what-tune-does-big-ben-chime/): independently viewed three-phrase third quarter.
+The canonical score itself is unchanged (Wikipedia Description; Harrison,
+MTO 6.4 2000 ¶16, 4/8/12/16 notes; UK Parliament bell names; Classic FM
+score). What changed is what can be shipped: canonical :15 and the 12-note
+:45 need change 1, which exists NOWHERE as contiguous PD audio (documented
+negative Commons search, 2026-11-08, in LICENSES.md). Shipping change 4
+(≈ change 1's opening G# and closing B) and changes 4+5 is a deliberate
+deviation, not a bug.
 
 ## FIX APPLIED
 
-- Changed G# instance from old 1.398s cut to cleaner **7.598–8.195s** source cut.
-- Retained actual recorded F#/E/B cuts, source-measured 0.663/0.647/0.553s
-  inter-onset gaps and the legitimate third phrase at :45.
-- Built :15 from the clean raw insert, not a q45 base+tail copy.
-- Correctly included 12ms first-note pre-roll in every placement.
-- Rebuilt only q15/q45 in AAC and Vorbis. New `--assembled-only` prevents
-  incidental re-encoding of approved recordings.
-- Runtime cache bumped to v1.2.2. No application behavior or strike timing edits.
+- q45 = contiguous source **7.50–14.47 s** (changes 4+5, 8 notes); the
+  appended change-1 insert is deleted.
+- q15 = contiguous source **7.598–10.88 s** (change 4, 4 notes) + the
+  proven 300 ms room-tone lead-in; ends 0.02 s before change 5's attack.
+- One shared source-to-asset gain (**+9.8845 dB**, peak −3 dBFS from the
+  q45 window); genuine recorded rhythm, no imposed grid.
+- Rebuilt only q15/q45 in AAC and Vorbis; `--assembled-only` keeps the
+  frozen recordings untouched (name is historical).
+- Runtime cache bumped to v1.3.0. No application behavior or strike
+  timing edits.
 
 Frozen SHA-256 checks cover all six q30/melody/bong files and five app/UI
-files. Old/new decoded q45 recorded base (0.2–6.3s) is identical in both
-codecs: correlation1.0, gain difference0.0dB.
+files. Contiguity proof: every measured onset in q15/q45 maps to a genuine
+source attack at a single constant offset (q15 +7.296…7.320 s, q45
++7.496…7.504 s, jitter ≤ 24 ms); decoded q15's note region matches q45's
+same region (r ≥ 0.995, gain Δ ≤ 0.08 dB) at the 0.098 s cut offset in
+both codecs.
 
 ## TESTS
 
 - `node tools/chime_test.js`: **151/151**.
 - `node --test tools/app_test.js tools/audio_contract_test.js tools/sw_test.js`: **95/95**.
-- `/usr/bin/python3 tools/audio_test.py SOURCE`: **17/17**.
-- `/usr/bin/python3 tools/scheme_test.py SOURCE`: **17/17** new, including
-  actual decoded count/order, extra/missing/reordered-note traps, silence,
-  first-note masking, source rhythm and frozen bytes.
+- `/usr/bin/python3 tools/audio_test.py SOURCE`: **14/14** (provenance,
+  gain, prefix identity, lead-in, envelopes, strike interval).
+- `/usr/bin/python3 tools/scheme_test.py SOURCE`: **17/17**, including
+  decoded count/order (4/8/8/16), extra/missing/reordered-note traps,
+  silence, first-note masking, genuine rhythm and frozen bytes.
 - Real Chrome browser suite: **473/473**, zero errors. Six viewports,
   11 main controls and 15 picker controls per viewport, all operated.
-  Native cold media, STOP, automatic chimes, complete chosen12-strike
+  Native cold media, STOP, automatic chimes, complete chosen 12-strike
   playback, offline AAC/Vorbis and zero external app requests covered.
-- Real v1.2.1→v1.2.2 upgrade: activation/controller change, previous app
-  cache removal, unrelated cache retained,21 release entries, exact new
+- Real v1.2.2→v1.3.0 upgrade: activation/controller change, previous app
+  cache removal, unrelated cache retained, 21 release entries, exact new
   hashes for all four updated audio files, offline playback and byte ranges.
-- Python compilation, focused Ruff checks and `git diff --check`: clean.
-- Read-only production check still saw **v1.2.1**, with its old q15 AAC hash
-  `a916829e3376165fd6e61aeb77321b4745b119cdacabdb486de1fa1080884a59`.
-  This is proof of unchanged production, NOT a production v1.2.2 test.
+- Python compilation and `git diff --check`: clean.
 
-## WHAT MARTIN SHOULD NOW HEAR
+## WHAT MARTIN SHOULD NOW HEAR (round 5)
 
-:15 should clearly start with the higher G# bell, then F#, E, low B.
-:45 should still have twelve notes in three groups, with that corrected
-G#/F#/E/B group at the end. :30, :00, picker, BONGY, auto and STOP remain
-unchanged. Listen to both assembled quarters after the verifier approves
-and main deploys; the extra four notes at :45 must NOT be removed.
+:15 should be the real recorded change 4 — higher G# bell, E, F#, low B,
+four notes, in the genuine recorded rhythm.
+:45 should be eight real notes in two groups: G# E F# B | B F# G# E,
+ending on the tonic E. :30, :00, picker, BONGY, auto and STOP remain
+unchanged. If :15/:45 still sound wrong in round 5, the remaining suspect
+is the material itself (the change-4-for-:15 substitution), not assembly
+artifacts — there are none left to remove.
 
 ## CONFIDENCE AND OPEN RISKS
 
-High confidence in the canonical score, identified contamination, correct
-source cuts, numerical improvement, frozen bytes and automated gates.
-The assertion that this resolves **every part of Martin's subjective
-complaint** is still unverified. Recordings retain real residual ringing;
-no mathematical isolation or synthesized replacement was attempted.
+High confidence in contiguity (constant-offset onset mapping, prefix
+identity, whole-asset provenance), frozen bytes and automated gates.
+Two genuine risks remain unverifiable by machine: (1) whether Martin's
+ear accepts the change-4 substitution for :15 and the 8-note :45 — the
+point of the whole change; (2) q15's ending stops 1.39 s after its final
+attack (the source's next event is change 5's B) — the same ending
+discipline as q30, but shorter decay than v1.2.2's room-tone dissolve.
 Headless playback and spectral analysis cannot prove phone-speaker quality.
-
-AGREE with the earlier narrow q15↔q45 waveform-identity finding; DISAGREE
-with treating shared provenance as musical correctness. Both derived
-assets can share the same defect. The former first-G# assertion checked
-only the source, not the actual standalone first-note mix.
 
 ## Renders actually inspected
 
 - `source-hour-annotated.png`: four source phrase boundaries and 16 notes.
-- `v1.2.1-quarters-side-by-side.png`: before, q15/q45/q30.
-- `v1.2.2-quarters-side-by-side.png`: after, same order, plus detailed crops viewed.
-- `zoom-source-first-Gs.png`, `zoom-q15-opening.png`: old E-ringing/late-G# mismatch.
-- `v1.2.1-measurements.json`, `v1.2.2-measurements.json`, `release-metrics.json`:
+- `v1.2.1/1.2.2-quarters-side-by-side.png`: earlier assembled rounds.
+- `v1.3.0-quarters-side-by-side.png`: v1.3.0 :15/:45/:30, 4/8/8 attacks.
+- `zoom-source-first-Gs.png`, `zoom-q15-opening.png`: old mismatch crops.
+- `v1.2.1/1.2.2/1.3.0-measurements.json`, `release-metrics.json`:
   machine-readable observations and exact hashes.
 
-Reproduce current images: `/usr/bin/python3 tools/audio_scheme.py SOURCE --label v1.2.2`.
+Reproduce current images: `/usr/bin/python3 tools/audio_scheme.py SOURCE --label v1.3.0`.
 For full build history and source license, see `../../docs/DEV.md` and `../../LICENSES.md`.

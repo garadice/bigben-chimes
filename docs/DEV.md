@@ -3,10 +3,51 @@
 Static HTML/CSS/JS; no build, runtime dependencies, trackers, external fonts,
 or runtime API calls. Serve the repository as-is. The service worker caches
 all local photo/audio/icon/shell files. Keep `CACHE` different from the last
-**published** release. This local candidate is `bigben-chimes-v1.2.2`;
+**published** release. This local candidate is `bigben-chimes-v1.3.0`;
 push/deploy belongs to main after the independent verifier gate.
 
-## v1.2.2 diagnosis: correct scheme, contaminated first note
+## v1.3.0: round-4 verdict — every assembled asset sounds wrong, so :15/:45 are now pure contiguous cuts
+
+After the v1.2.2 rebuild, Martin's round-4 listen verdict (2026-11-20, the
+final acceptance test) was: **:15 and :45 STILL sound wrong; :30, :00,
+BONGY and the hour picker are all right.** Four rounds of listening have now
+produced one consistent pattern: every CONTIGUOUS cut of the 1945 source
+sounds right (:30, :00, and the recorded base of :45), and every
+ASSEMBLED/pasted asset sounds wrong (every :15 variant ever shipped, and
+:45's appended insert). The assembled change-1 material is therefore
+abandoned — all of it, permanently. Do not re-add it.
+
+```
+canonical (unreachable)         shipped v1.3.0
+:15 = change 1        4 notes   :15 = recorded change 4, cut   4 notes, ends B
+:30 = changes 2+3     8 notes   :30 = changes 2+3 (unchanged)  8 notes, ends E
+:45 = changes 4+5+1  12 notes   :45 = recorded changes 4+5 cut 8 notes, ends E
+:00 = changes 2+3+4+5 16 notes  :00 = changes 2+3+4+5 (unchn.) 16 notes, ends E
+```
+
+- `q45` = contiguous recorded changes 4+5 ONLY, source **7.50–14.47 s**,
+  8 genuine notes. The appended assembled change-1 insert (asset time
+  6.558 s in v1.2.2) is deleted. The canonical 12-note :45 is abandoned:
+  its third phrase is change 1, which exists NOWHERE as contiguous PD
+  audio (documented negative Commons search, 2026-11-08, in LICENSES.md).
+  An 8-note :45 is a deliberate deviation, not a bug to fix.
+- `q15` = contiguous recorded change 4 (G#4 E4 F#4 B3 — nearest genuine
+  material to canonical change 1, sharing its opening G# and closing B),
+  source **7.598–10.88 s**, plus the proven 300 ms room-tone lead-in.
+  4 genuine notes. The change-1 score order (G# F# E B) is NOT what :15
+  plays in v1.3.0; that material cannot be cut contiguously.
+- `q15`'s cut must start at the first hammer's −12 ms pre-roll, NOT at
+  7.50 s like `q45`. Measured on the first v1.3.0 build: joining the
+  room-tone lead-in into the middle of change 3's decaying tail is a
+  sustained ~15 dB ambience step; the independent detector transcribed it
+  as a spurious E onset (strength 0.0580 ≈ the real G#'s 0.0578) and the
+  coincidence grouping then suppressed the genuine G# — the exact
+  "continuous background becomes an abrupt onset" defect class the v1.2.2
+  diagnosis removed. With the 12 ms pre-roll and the 3 ms rise-from-zero
+  de-click, the pre-attack residual rises as part of the attack complex:
+  one onset, first bell G# (measured detector strength 0.0642 > E 0.0613).
+
+## v1.2.2 diagnosis (superseded recipe, still-valid measurements)
 
 Martin retracted the earlier approval of :45: **both :15 and :45 sound wrong**.
 The v1.2.1 "cold-start context" explanation is superseded, not confirmed.
@@ -98,52 +139,56 @@ appear as one frequency in the spectrum. Therefore the PNGs mark nominal
 bell identities plus **measured low partials**, not fabricated fundamental
 estimates. The untouched source's complete melody anchors those identities.
 
-## Current build: real source-note cuts, no synthesis
+## Current build: pure contiguous source cuts, no synthesis, no assembly
 
-`tools/cut_audio.py` checks the original WAV hash, then builds one raw
-G#/F#/E/B insert from individual recorded notes:
+`tools/cut_audio.py` checks the original WAV hash, then builds the quarters
+as plain contiguous source segments (plus the two unchanged ffmpeg cuts):
 
-- G#: **7.598–8.195 s** nominal slice, attack 7.61 s — cleaner instance.
-- F#: **2.170–2.945 s**, attack 2.27 s; its source predecessor is G#.
-- E: **0.250–1.395 s**, attack 0.35 s — the clean initial source bell.
-- B: **2.940–4.390 s**, attack 2.96 s — longest available final-B decay.
+- `q45`: source **7.50–14.47 s** — recorded changes 4+5, 8 notes, nothing
+  else. The final E (12.69 s) rings 1.78 s into genuine hall decay/room
+  tone before the end fade.
+- `q15`: source **7.598–10.88 s** — recorded change 4 (attacks 7.61 / 8.21 /
+  8.90 / 9.49 s), ending 0.02 s before change 5's first attack, with a
+  3 ms rise-from-zero de-click at the segment start.
+- melody / q30 / bong: unchanged since v1.1.0 (see the hash contracts).
 
-Cut ends move to nearby zero crossings; 80 ms outgoing fades act on BOTH
-stereo channels. These are real recorded attacks with residual room sound,
-not mathematically isolated tones. There is no note synthesis, looping,
-pitch-shifting, stretching, or runtime note scheduling.
+There is no note assembly, overlap-add, looping, pitch-shifting,
+stretching, or runtime note scheduling. The assembled-insert machinery
+(`Q15_SLICES`, `STEPS`, `CHANGE_GAP`, `build_change1_insert`) is deleted
+from the recipe.
 
-- Source-measured inter-onset gaps remain **0.663 / 0.647 / 0.553 s**,
-  from per-position means of changes 3–5; the source opening is slower.
-- Pre-roll is accounted for consistently: :15's nominal attacks are
-  **0.312 / 0.975 / 1.622 / 2.175 s**, not a first note offset from the grid.
-- `q15` = 300 ms natural room-tone lead-in + clean insert. It is **not**
-  cut from q45. The lead-in retains v1.2.1's quiet unity-gain ambience;
-  changing lead-in/gain is not the proposed musical cure.
-- `q45` = contiguous recorded changes 4+5, source **7.50–14.47 s**, plus
-  that same insert. The insert starts at **6.558 s** asset time, so its
-  first attack is **1.380 s** after the preceding E attack.
-- Notes in both assets share one source-to-asset gain (**+7.8742 dB**),
-  derived from the complete q45 mix, target peak −3 dBFS. No per-note gain.
-- Final B dissolves into the same real room-tone window over 450 ms, then
-  the room window continues into a 150 ms ending with an 80 ms fade.
-- :15 raw duration **3.753854 s**; :45 **10.061854 s**. Codec padding can
-  add a small duration difference to the decode.
-
-The recorded first two phrases of :45 remain sample-identical after decode
-in their unmodified interior: old/new correlation **1.0**, gain delta
-**0.0 dB**, both codecs, tested 0.2–6.3 s. Only its appended change is rebuilt.
+- Both quarters share ONE source-to-asset gain (**+9.8845 dB**, peak
+  −3 dBFS derived from the complete q45 window), so notes keep their
+  natural recorded balance across both assets. No per-note gain.
+- `q15` opens with v1.2.1's quiet unity-gain room-tone lead-in (300 ms,
+  sin² ramp, from the quietest 1 s ring-out window at ~19.95 s).
+- The genuine recorded rhythm is shipped as-is: change 4's real inter-onset
+  gaps (≈0.60 / 0.69 / 0.59 s) and the real 1.41 s change-4→5 gap — no
+  measured-mean grid is imposed.
+- Nominal asset attacks: q15 **0.312 / 0.912 / 1.602 / 2.192 s**;
+  q45 **0.110 / 0.710 / 1.400 / 1.990 / 3.400 / 4.100 / 4.700 / 5.190 s**.
+- Raw durations: q15 **3.582 s**; q45 **6.97 s**. Codec padding can add a
+  small duration difference to the decode.
+- Contiguity proof (independent detector, decoded AAC): every measured
+  onset maps to a genuine source attack at a single constant offset —
+  q15: +7.296…7.320 s (cut origin 7.598 minus the 0.300 lead), q45:
+  +7.496…7.504 s (origin 7.50). A pasted insert would need per-note
+  offsets; there are none.
 
 ### Frozen scope
 
 SHA-256 contracts pin **all six** :30/:00/hour-strike encodings plus
 `app.js`, `chime.js`, `styles.css`, `index.html`, `manifest.json` to v1.2.1.
-No changes to picker, BONGY, auto-chime behavior, STOP, first-gesture unlock,
-layout, or the **4.015 s** strike interval. Only `q15.*` / `q45.*` audio and
-the service-worker release identity change at runtime.
+No changes to picker, BONGY, auto-chime behavior, STOP, first-gesture
+unlock, layout, or the **4.015 s** strike interval. Only `q15.*` / `q45.*`
+audio and the service-worker release identity change at runtime.
+Known comment rot, accepted under the freeze: `chime.js`'s header comments
+still describe the v1.2.2 assembled recipe (its hash is pinned); the
+runtime behavior — which file plays at which quarter — is unchanged.
 
-Use `--assembled-only` to avoid re-encoding frozen assets (Vorbis container
-serial numbers can otherwise change even with identical decoded samples):
+Use `--assembled-only` (name is historical) to avoid re-encoding frozen
+assets (Vorbis container serial numbers can otherwise change even with
+identical decoded samples):
 
 ```
 /usr/bin/python3 tools/cut_audio.py /path/to/source-1945.wav --assembled-only
@@ -156,17 +201,18 @@ crops, not merely generated:
 
 - `source-hour-annotated.png`: all 16 source attacks, four phrase boundaries,
   measured partials and canonical bell identities.
-- `v1.2.1-quarters-side-by-side.png`: before :15/:45/:30.
-- `v1.2.2-quarters-side-by-side.png`: after :15/:45/:30, 4/12/8 dominant
-  attacks, correct G#/F#/E/B in both assembled change-1 passages.
+- `v1.2.1-quarters-side-by-side.png` / `v1.2.2-quarters-side-by-side.png`:
+  earlier rounds (assembled recipes, ear-rejected).
+- `v1.3.0-quarters-side-by-side.png`: v1.3.0 :15/:45/:30 — 4/8/8 dominant
+  attacks, genuine G# E F# B | B F# G# E in the two contiguous cuts.
 - `zoom-source-first-Gs.png` / `zoom-q15-opening.png`: old cut/attack mismatch.
 - `*-measurements.json` / `release-metrics.json`: onsets, order, rhythm,
-  before/after energy, hashes and frozen-file comparisons.
+  hashes and frozen-file comparisons.
 
 Reproduce the annotated current renders:
 
 ```
-/usr/bin/python3 tools/audio_scheme.py /path/to/source-1945.wav --label v1.2.2
+/usr/bin/python3 tools/audio_scheme.py /path/to/source-1945.wav --label v1.3.0
 ```
 
 Full gates (development dependencies only):
@@ -183,23 +229,25 @@ Verified results for this candidate:
 
 - Timeline/scheduler: **151 passed**.
 - App/timeline/cache contracts: **95 passed**.
-- Decoded stereo/provenance/gain/tail/strike tests: **17 passed**. Obsolete
-  :15=q45-tail identity is replaced by independent first-G# provenance and
-  shared F#/E/B identity. Existing quality thresholds are retained.
+- Decoded stereo/provenance/gain/tail/strike tests: **14 passed**. The
+  assembled-insert contracts are replaced by whole-asset source provenance
+  at one gain (q15 and q45), q15≡q45 prefix identity at a constant offset,
+  and the q30-smoothness envelope A/B extended to both quarters.
 - Independent scheme suite: **17 passed**, including all four quarters in
-  both codecs, all 16 source notes, wrong-order/missing/extra-note detector
-  fixtures, silence, actual first-note masking, source rhythm and frozen bytes.
+  both codecs (4/8/8/16 notes), all 16 source notes,
+  wrong-order/missing/extra-note detector fixtures, silence, actual
+  first-note masking, genuine recorded rhythm and frozen bytes.
 - Real Chrome: **473/473 checks** (468 existing + five upgrade checks).
   Six viewports, 11 main controls + 15 picker controls each, every control
   operated; all 12 picker hours; full real 12-strike playback; STOP and cold
   unlock races; all five sound types offline in AAC and Vorbis.
-- Real v1.2.1→v1.2.2 cache upgrade waits for controllerchange/activated,
+- Real v1.2.2→v1.3.0 cache upgrade waits for controllerchange/activated,
   removes only old app caches, preserves an unrelated cache, checks all
   21 release entries and exact SHA-256 bodies of all four changed audio files,
   then exercises offline playback and cached byte ranges.
 
 These gates run against the **local unpushed candidate**, as required by
-the no-deploy instruction. They are not production v1.2.2 verification.
+the no-deploy instruction. They are not production v1.3.0 verification.
 Headless media progress, spectral classification and smooth decays do NOT
 prove phone-speaker sound quality. **Martin's phone listen after the verifier
 and main's deployment remains the final acceptance.**
@@ -213,10 +261,12 @@ Original: 72.395521 s, 48 kHz stereo PCM. SHA-256:
 `9e6163c1a485b17829eb69cb58b0f187d4d9e690be26a224d7e6568b24d29e70`.
 Original WAV is not shipped; unknown source hashes are refused.
 
-Contiguous assets remain:
+Contiguous assets (all four quarter/hour assets are pure cuts now):
 
 - `melody.*`: source 0.25–21.05 s, 20.80 s, changes 2+3+4+5.
 - `q30.*`: source 0.25–7.48 s, 7.23 s, changes 2+3.
+- `q45.*`: source 7.50–14.47 s, 6.97 s, changes 4+5 (v1.3.0).
+- `q15.*`: source 7.598–10.88 s + room-tone lead-in, 3.58 s, change 4 (v1.3.0).
 - `bong.*`: source 41.47–44.90 s, 3.43 s, one hour strike and decay.
 
 Source attack map (approximate hammer/partial onset, not detector peak centre):
@@ -237,7 +287,9 @@ negative search result, not proof that no recording exists anywhere.
 Historical v1.1.0 defects included per-note normalization, hard slice ends,
 a mechanical 0.7 s grid and runtime stitching. v1.2.0 fixed those but kept
 the contaminated G# instance. v1.2.1 wrongly treated :45 as approved and
-copied its ending into :15. Both are superseded by the measured v1.2.2 fix.
+copied its ending into :15. v1.2.2 rebuilt the assembled insert with a
+cleaner G#; Martin still rejected both assembled quarters (round 4), and
+v1.3.0 removed the assembled material entirely.
 
 ## Application behavior — unchanged
 

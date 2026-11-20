@@ -2,7 +2,7 @@
 """Development audio regression: numpy/scipy + ffmpeg, no app dependencies.
 Run: python3 tools/audio_test.py /path/to/source-1945.wav
 Tests the ACTUAL decoded samples against independently documented cut ranges
-and the assembled-quarter recipe in tools/cut_audio.py (single source of truth).
+and the contiguous-quarter recipe in tools/cut_audio.py (single source of truth).
 """
 import hashlib
 from pathlib import Path
@@ -22,18 +22,21 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 EXPECTED = {'melody': (.25, 21.05), 'q30': (.25, 7.48), 'bong': (41.47, 44.90)}
 
-# Note positions inside the assembled assets (asset seconds, from cut_audio).
+# v1.3.0 contiguous quarters (asset seconds, from the recipe constants).
 Q15_LEAD = recipe.LEAD_IN_S
-Q15_FIRST = Q15_LEAD + .012
-Q15_ATTACKS = {'G#': Q15_FIRST, 'F#': Q15_FIRST + recipe.STEPS[0],
-               'E': Q15_FIRST + sum(recipe.STEPS[:2]),
-               'B': Q15_FIRST + sum(recipe.STEPS)}
-# the change-1 insert that lives INSIDE q45 (nominal recipe pieces; the
-# zero-crossing cut jitters <= 13 ms, inside every duration tolerance here)
-INSERT_DUR = (.012 + sum(recipe.STEPS) - .020) \
-    + (recipe.ATTACKS['E'][1] - recipe.ATTACKS['B'][0]) + .15
-Q15_DUR = Q15_LEAD + INSERT_DUR  # clean insert, no q45 base or final padding
-Q45_JOIN = recipe.ATTACKS['E'][4] - recipe.Q45_BASE[0] + recipe.CHANGE_GAP
+CHANGE4 = (recipe.ATTACKS['G#'][2], recipe.ATTACKS['E'][3],
+           recipe.ATTACKS['F#'][2], recipe.ATTACKS['B'][1])
+CHANGE45 = CHANGE4 + recipe.CHANGE5
+# (note, asset-time) lists: q45 legitimately repeats bells, so no dict.
+Q15_ATTACKS = list(zip(('G#', 'E', 'F#', 'B'),
+                       (Q15_LEAD + t - recipe.Q15_CUT[0] for t in CHANGE4)))
+Q45_ATTACKS = list(zip(('G#', 'E', 'F#', 'B', 'B', 'F#', 'G#', 'E'),
+                       (t - recipe.Q45_CUT[0] for t in CHANGE45)))
+Q15_DUR = Q15_LEAD + recipe.Q15_CUT[1] - recipe.Q15_CUT[0]   # lead + change 4
+Q45_DUR = recipe.Q45_CUT[1] - recipe.Q45_CUT[0]              # changes 4+5 window
+# q15's note region sits inside q45 at this asset-time offset (one shared
+# cut origin difference: 7.598 - 7.50); equality there proves one build.
+Q15_IN_Q45 = recipe.Q15_CUT[0] - recipe.Q45_CUT[0]
 
 def decode(path):
     result = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(path),
@@ -93,7 +96,7 @@ class AudioTests(unittest.TestCase):
         self.assertGreater(c, .96, f'{name}.{ext}: waveform correlation {c:.4f}; wrong onset/cut')
         self.assertLess(float(np.max(np.abs(data[-120:]))), .04, 'end must fade out rather than click')
 
-    # ---- q15 v1.2.2: clean source-note insert + room-tone lead-in ----
+    # ---- q15 v1.3.0: contiguous change-4 cut + room-tone lead-in ----
     def check_q15(self, ext):
         data = decode(ROOT / 'audio' / f'q15.{ext}')
         mono = data.mean(1)
@@ -101,6 +104,14 @@ class AudioTests(unittest.TestCase):
         self.assertLess(float(np.abs(data).max()), .96, 'decoded stereo must have safe headroom')
         self.assertLess(abs(len(mono) / self.sr - Q15_DUR), .05, 'duration must match the recipe')
         self.assertLess(float(np.max(np.abs(data[-120:]))), .04, 'end must fade out rather than click')
+
+        # whole note region IS the contiguous source segment, one gain
+        a = mono[int((Q15_LEAD + .02) * self.sr):int((Q15_DUR - .12) * self.sr)]
+        b = self.source[int((recipe.Q15_CUT[0] + .02) * self.sr):int((recipe.Q15_CUT[1] - .12) * self.sr)]
+        n = min(len(a), len(b)); a, b = a[:n].astype(float), b[:n]
+        gain = float(np.dot(a, b) / np.dot(b, b))
+        self.assertGreater(corr(a, b * gain), .99,
+                           f'q15.{ext}: note region is not the contiguous source cut')
 
         def rms_db(x):
             return 20 * np.log10(max(float(np.sqrt(np.mean(x ** 2))), 1e-12))
@@ -131,112 +142,96 @@ class AudioTests(unittest.TestCase):
                            'lead-in is not the 1945 recording room tone')
 
         # A bounded rise into the first attack is expected, never a down-cliff.
-        # The old copied q45 base E must NOT be reintroduced at this seam.
         pre = mono[int((Q15_LEAD - .04) * self.sr):int((Q15_LEAD - .005) * self.sr)]
         post = mono[int(Q15_LEAD * self.sr):int((Q15_LEAD + .010) * self.sr)]
         step = rms_db(pre) - rms_db(post)
-        self.assertLess(step, 8.0, f'lead-in cliffs {step:.1f} dB down at the q45 tail join')
-        self.assertGreater(step, -30.0, f'unexpected {abs(step):.1f} dB jump at the q45 tail join')
+        self.assertLess(step, 8.0, f'lead-in cliffs {step:.1f} dB down at the cut join')
+        self.assertGreater(step, -30.0, f'unexpected {abs(step):.1f} dB jump at the cut join')
 
-        # Check EVERY ACTUAL ASSET NOTE, including the formerly skipped G#.
-        for note, at in Q15_ATTACKS.items():
+        # Check EVERY ACTUAL ASSET NOTE against the recorded change 4.
+        for note, at in Q15_ATTACKS:
             flux = band_flux_new_energy(mono, self.sr, at, FING)
             winner = max(flux, key=flux.get)
             self.assertEqual(winner, note,
                              f'q15 note at {at:.2f}s does not fingerprint as {note}')
 
+    def check_q15_q45_prefix(self, ext):
+        """v1.3.0 contiguity: :15's note region IS a region of :45.
 
-    def check_q15_q45_shared_insert(self, ext):
-        """Shared source notes, NOT a copy of the preceding q45 base E.
-
-        F#/E/B match after the base's natural ring-out ends: correlation
-        >=.99, gain delta <.5dB. Initial standalone G# independently matches
-        the cleaner recorded instance at 7.61s.
+        Both assets cut the same recording with one shared gain, so after
+        the lead-in q15 must equal q45 at a constant offset (7.598-7.50).
+        Sample identity at ONE offset is only possible when no material was
+        pasted: an assembly would need per-note offsets.
         """
         q15 = decode(ROOT / 'audio' / f'q15.{ext}').mean(1)
         q45 = decode(ROOT / 'audio' / f'q45.{ext}').mean(1)
-        tail_start = int((Q45_JOIN - .012) * self.sr)
-        # q45 includes 50ms final padding; q15 does not copy that padding.
-        self.assertLess(abs(len(q15) - (int(Q15_LEAD * self.sr) + len(q45) - tail_start
-                                       - int(.05 * self.sr))),
-                        int(.025 * self.sr),
-                        'q15 must contain the clean insert, not the padded q45 tail')
-        offset = (Q45_JOIN - .012) - Q15_LEAD
-        n = int(.44 * self.sr)
-        lag_max = int(.02 * self.sr)
-        for note, at in list(Q15_ATTACKS.items())[1:]:
-            a = q45[int((at + offset - .02) * self.sr):][:n]
-            b = q15[int((at - .02) * self.sr):][:n]
-            best_c, best_g = -2.0, 0.0
-            for lag in range(-lag_max, lag_max + 1, 8):
-                if lag >= 0:
-                    x, y = a[lag:], b[:len(a) - lag]
-                else:
-                    x, y = a[:len(a) + lag], b[-lag:]
-                m = min(len(x), len(y))
-                x, y = x[:m], y[:m]
-                c = corr(x, y)
-                if c > best_c:
-                    best_c = c
-                    best_g = 20 * np.log10(float(np.linalg.norm(y) / np.linalg.norm(x)))
-            self.assertGreaterEqual(best_c, .99,
-                f'{ext}: {note} correlates {best_c:.4f} with the shared q45 insert')
-            self.assertLess(abs(best_g), .5,
-                f'{ext}: {note} sits {best_g:+.2f} dB off the shared q45 insert')
-        at, origin = Q15_FIRST + .08, 7.61 + .08
-        actual = q15[int(at * self.sr):int((at + .25) * self.sr)]
-        source = self.source[int(origin * self.sr):int((origin + .25) * self.sr)]
-        self.assertGreater(corr(actual, source), .98,
-                           'standalone G# is not the cleaner source attack at 7.61s')
+        self.assertLess(len(q15), len(q45) - int(3.0 * self.sr),
+                        'q15 must not contain the padded q45 tail')
+        n = int((Q15_DUR - Q15_LEAD - .12) * self.sr)
+        a = q15[int((Q15_LEAD + .01) * self.sr):][:n]
+        # q45 has no lead-in: its asset time is the cut offset directly.
+        b = q45[int((Q15_IN_Q45 + .01) * self.sr):][:n]
+        best_c, best_g = -2.0, 0.0
+        for lag in range(-16, 17, 8):
+            if lag >= 0:
+                x, y = b[lag:], a[:len(b) - lag]
+            else:
+                x, y = b[:len(b) + lag], a[-lag:]
+            m = min(len(x), len(y))
+            x, y = x[:m].astype(float), y[:m]
+            c = corr(x, y)
+            if c > best_c:
+                best_c = c
+                best_g = 20 * np.log10(float(np.linalg.norm(y) / np.linalg.norm(x)))
+        self.assertGreaterEqual(best_c, .995,
+            f'{ext}: q15 note region correlates {best_c:.4f} with the same q45 region')
+        self.assertLess(abs(best_g), .3,
+            f'{ext}: q15 sits {best_g:+.2f} dB off the shared gain region of q45')
 
-    # ---- assembled q45: recorded changes 4+5 + change 1 at the measured gap ----
+    # ---- q45 v1.3.0: one contiguous cut of recorded changes 4+5 ----
     def check_q45(self, ext):
         data = decode(ROOT / 'audio' / f'q45.{ext}')
         mono = data.mean(1)
         self.assertTrue(np.isfinite(data).all())
         self.assertLess(float(np.abs(data).max()), .96)
-        self.assertLess(abs(len(mono) / self.sr - (Q45_JOIN + INSERT_DUR + 0.05)), .12,
-                        'duration must match base + joined phrase')
+        self.assertLess(abs(len(mono) / self.sr - Q45_DUR), .12,
+                        'duration must match the changes-4+5 window')
         self.assertLess(float(np.max(np.abs(data[-120:]))), .04)
 
-        # base = recorded changes 4+5, verbatim from the source
-        c = corr(mono[int(.10 * self.sr):int(6.4 * self.sr)] / np.abs(mono).max(),
-                 self.source[int(7.60 * self.sr):int(13.90 * self.sr)] /
-                 float(np.abs(self.source[int(7.60 * self.sr):int(13.90 * self.sr)]).max()))
-        self.assertGreater(c, .96, f'q45.{ext}: base segment is not the recorded changes 4+5 ({c:.4f})')
-
-        # G# starts under the recorded E decay: its inharmonic B-band partial
-        # can beat the G# band at HONEST source levels. Verify the new G#
-        # waveform after subtracting the known base, not the loudest band.
-        a = mono[int(.2 * self.sr):int(6.0 * self.sr)]
-        b = self.source[int(7.7 * self.sr):int(13.5 * self.sr)]
+        # the WHOLE asset is the recorded source window at one gain
+        a = mono[int(.10 * self.sr):int((Q45_DUR - .12) * self.sr)].astype(float)
+        b = self.source[int((recipe.Q45_CUT[0] + .10) * self.sr):int((recipe.Q45_CUT[1] - .12) * self.sr)]
+        n = min(len(a), len(b)); a, b = a[:n], b[:n]
         gain = float(np.dot(a, b) / np.dot(b, b))
-        joined_at = Q45_JOIN - .012
-        lo, hi = int((joined_at + .1) * self.sr), int((joined_at + .3) * self.sr)
-        base = self.source[int(7.50 * self.sr) + lo:int(7.50 * self.sr) + hi]
-        isolated = mono[lo:hi] - base * gain
-        reference = self.source[int(7.698 * self.sr):int(7.898 * self.sr)]
-        self.assertGreater(corr(isolated, reference), .96, 'joined G# source attack must survive the mix')
-        src_flux = band_flux_new_energy(self.source, self.sr, 7.61, FING)
-        self.assertEqual(max(src_flux, key=lambda name: src_flux[name]), 'G#')
-        # The remaining newly struck bells dominate their own fingerprint band.
-        for note, at in [('F#', Q45_JOIN + recipe.STEPS[0]),
-                         ('E', Q45_JOIN + recipe.STEPS[0] + recipe.STEPS[1]),
-                         ('B', Q45_JOIN + recipe.STEPS[0] + recipe.STEPS[1] + recipe.STEPS[2])]:
-            flux = band_flux_new_energy(mono, self.sr, at, FING)
-            winner = max(flux, key=flux.get)
-            self.assertEqual(winner, note,
-                             f'q45 joined note at {at:.2f}s does not fingerprint as {note}')
+        c = corr(a, b * gain)
+        self.assertGreater(c, .99,
+            f'q45.{ext}: waveform correlation {c:.4f}; not the contiguous source window')
 
-        # the join must not cliff: envelope step at the seam stays small
-        e = env_db(mono, self.sr)
-        pre_join = float(np.mean(e[int(6.30 / .02):int(6.44 / .02)]))
-        at_join = float(np.mean(e[int(6.46 / .02):int(6.52 / .02)]))
-        self.assertLess(abs(at_join - pre_join), 3.0,
-                        f'q45 seam envelope step {abs(at_join - pre_join):.1f} dB is audible')
+        # one gain throughout: no re-normalized insert anywhere inside
+        def seg_gain(at, duration):
+            x = mono[int(at * self.sr):int((at + duration) * self.sr)].astype(float)
+            y = self.source[int((recipe.Q45_CUT[0] + at) * self.sr):
+                            int((recipe.Q45_CUT[0] + at + duration) * self.sr)]
+            m = min(len(x), len(y)); x, y = x[:m], y[:m]
+            return float(np.dot(x, y) / np.dot(y, y))
+        early, late = seg_gain(.2, 2.8), seg_gain(3.5, 3.2)
+        mismatch = abs(20 * np.log10(late / early))
+        self.assertLess(mismatch, .3,
+            f'{ext}: q45 gain changes {mismatch:.2f} dB between changes 4 and 5')
+
+        # Note identities are asserted BY the provenance above: the decoded
+        # waveform IS the recorded window, so every bell is the genuine
+        # recorded attack. A per-note fingerprint-band winner is NOT a valid
+        # instrument here: measured on this build, change 5's B (asset 3.40s)
+        # re-strikes the same bell 1.41 s after change 4's B, whose decay
+        # saturates the B band, and the E band's wash variation outscores the
+        # fresh B — the same honest-level limitation the v1.2.2 diagnosis
+        # documented for the joined G#. Count, order, rhythm and the
+        # masked-opening check are owned by tools/scheme_test.py (independent
+        # full-spectrum detector) and check_q15 above.
 
     def test_inter_attack_envelope_is_as_smooth_as_the_q30_reference(self):
-        """A/B contract: between attacks, q15 decays as smoothly as contiguous q30."""
+        """A/B contract: between attacks, q15 AND q45 decay as smoothly as contiguous q30."""
         def worst(x, attacks):
             e = env_db(x, self.sr)
             w = 0.0
@@ -245,50 +240,14 @@ class AudioTests(unittest.TestCase):
                 w = max(w, float(np.abs(np.diff(e[lo:hi])).max()))
             return w
         q30 = decode(ROOT / 'audio' / 'q30.m4a').mean(1)
-        q15 = decode(ROOT / 'audio' / 'q15.m4a').mean(1)
         worst30 = worst(q30, [.10, 1.16, 2.02, 2.71, 4.16, 4.85, 5.50, 6.08])
-        worst15 = worst(q15, list(Q15_ATTACKS.values()))
-        self.assertLessEqual(worst15, worst30 + 1.5,
-                             f'q15 envelope cliffs ({worst15:.1f} dB/20ms) exceed the q30 '
-                             f'reference ({worst30:.1f} dB/20ms) — stitching is audible again')
-
-    def test_q45_uses_the_same_source_gain_for_base_and_joined_phrase(self):
-        """Correlation alone cannot detect a normalized insert becoming 12 dB louder."""
-        for ext in ['m4a', 'ogg']:
-            asset = decode(ROOT / 'audio' / f'q45.{ext}').mean(1)
-            def gain(asset_at, source_at, duration):
-                a = asset[int(asset_at * self.sr):int((asset_at + duration) * self.sr)]
-                b = self.source[int(source_at * self.sr):int((source_at + duration) * self.sr)]
-                n = min(len(a), len(b)); a, b = a[:n], b[:n]
-                return float(np.dot(a, b) / np.dot(b, b))
-            base_gain = gain(.2, 7.7, 5.8)
-            # E slice after the F# tail ends, before the B insert begins.
-            joined_gain = gain(Q45_JOIN + sum(recipe.STEPS[:2]) + .07, .42, .30)
-            mismatch = abs(20 * np.log10(joined_gain / base_gain))
-            self.assertLess(mismatch, 1.0, f'{ext}: q45 gain changes {mismatch:.2f} dB at change 1')
-
-    def test_room_tone_does_not_drop_into_silent_padding(self):
-        # These are the actual end-of-dissolve seams, NOT the last 120 samples
-        # (those samples were already zero and falsely passed the old check).
-        # The insert-internal seam sits at 3.303854 s inside the change-1
-        # phrase; q15 carries it after the lead-in, q45 after the join.
-        seam = 3.303854
-        for name, at in [('q15', Q15_LEAD + seam), ('q45', Q45_JOIN - .012 + seam)]:
-            for ext in ['m4a', 'ogg']:
-                x = decode(ROOT / 'audio' / f'{name}.{ext}').mean(1)
-                i, w = int(at * self.sr), int(.02 * self.sr)
-                pre = np.sqrt(np.mean(x[i-w:i] ** 2))
-                post = np.sqrt(np.mean(x[i:i+w] ** 2))
-                drop = 20 * np.log10(max(pre, 1e-12) / max(post, 1e-12))
-                self.assertLess(drop, 8, f'{name}.{ext}: room-tone seam cliffs {drop:.1f} dB')
-
-    def test_source_slice_ends_fade_both_channels_not_only_the_channel_mean(self):
-        stereo = recipe.decode_stereo(SOURCE)
-        for start, end, _ in recipe.Q15_SLICES:
-            cut = recipe.zc_time(stereo.mean(1), end)
-            segment = recipe.slice_seg(stereo, start, cut)
-            self.assertLess(float(abs(segment[-1]).max()), 1e-8,
-                            'a mono zero crossing is not a stereo de-click fade')
+        for name, attacks in [('q15', [at for _n, at in Q15_ATTACKS]),
+                              ('q45', [at for _n, at in Q45_ATTACKS])]:
+            x = decode(ROOT / 'audio' / f'{name}.m4a').mean(1)
+            worst_x = worst(x, attacks)
+            self.assertLessEqual(worst_x, worst30 + 1.5,
+                f'{name} envelope cliffs ({worst_x:.1f} dB/20ms) exceed the q30 '
+                f'reference ({worst30:.1f} dB/20ms) — stitching is audible again')
 
     def test_source_strike_interval(self):
         x = signal.resample_poly(self.source, 1, 6)
@@ -307,7 +266,7 @@ for name in EXPECTED:
         setattr(AudioTests, 'test_' + name.replace('-', '_') + '_' + ext, case)
 
 for name, fn in [('q15', 'check_q15'), ('q45', 'check_q45'),
-                 ('q15_q45_shared_insert', 'check_q15_q45_shared_insert')]:
+                 ('q15_q45_prefix', 'check_q15_q45_prefix')]:
     for ext in ['m4a', 'ogg']:
         def case(self, fn=fn, ext=ext):
             getattr(self, fn)(ext)

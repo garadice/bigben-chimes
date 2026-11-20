@@ -66,18 +66,18 @@ eq(C.BONG_GAP, 4.015, 'strike gap = independently measured mean 4.015 s');
 eq(C.MELODY_DUR, 20.8, 'complete 16-note melody asset 20.80 s');
 eq(C.STRIKE_PAUSE, 0.6, 'explicit melody-end -> first-strike pause 0.6 s');
 
-console.log('== quarterEvents(1) — :15, change 1 as one assembled asset ==');
+console.log('== quarterEvents(1) — :15, contiguous change 4 as one asset ==');
 const q1 = C.quarterEvents(1, 14);
-eq(q1, [{ file: 'q15', at: 0 }], ':15 = the assembled change-1 recording, one event');
+eq(q1, [{ file: 'q15', at: 0 }], ':15 = the contiguous change-4 recording, one event');
 eq(C.quarterEvents(1, 23), [{ file: 'q15', at: 0 }], ':15 never schedules strikes');
 
 console.log('== quarterEvents(2) — :30, changes 2+3 ==');
 eq(C.quarterEvents(2, 14), [{ file: 'q30', at: 0 }],
    ':30 = the recorded changes-2+3 recording, one event');
 
-console.log('== quarterEvents(3) — :45, changes 4+5+1 as one joined asset ==');
+console.log('== quarterEvents(3) — :45, contiguous changes 4+5 as one asset ==');
 eq(C.quarterEvents(3, 14), [{ file: 'q45', at: 0 }],
-   ':45 = the joined changes-4+5+1 recording, one event');
+   ':45 = the contiguous changes-4+5 recording, one event');
 
 console.log('== quarterEvents(0) — :00 auto mode: melody AND hour strikes ==');
 const q0_15 = C.quarterEvents(0, 15);
@@ -143,12 +143,13 @@ for (const q of [0, 1, 2, 3]) {
   }
 }
 {
-  // canonical ending rule: :15/:45 end on the dominant B3, :30/:00 on tonic E4.
-  // :15 and :45 are single assets whose final note is asserted by
-  // tools/audio_test.py (fingerprint bands); here we assert the asset choice.
-  eq(C.quarterEvents(1, 10)[0].file, 'q15', ':15 = change-1 asset (ends B3, verified in audio_test.py)');
+  // canonical ending rule: :15 ends on the dominant B3 (change 4), :30/:45/:00
+  // on tonic E4 (change 5 ends E). :15/:45 are single assets whose final note
+  // is asserted by tools/scheme_test.py (decoded attack order); here we
+  // assert the asset choice.
+  eq(C.quarterEvents(1, 10)[0].file, 'q15', ':15 = change-4 cut (ends B3, verified by scheme_test.py)');
   eq(C.quarterEvents(2, 10)[0].file, 'q30', ':30 recorded phrase ends E4 (tonic)');
-  eq(C.quarterEvents(3, 10)[0].file, 'q45', ':45 joined asset (ends B3, verified in audio_test.py)');
+  eq(C.quarterEvents(3, 10)[0].file, 'q45', ':45 changes-4+5 cut (ends E4, verified by scheme_test.py)');
   eq(C.melodyOnlyEvents()[0].file, 'melody', ':00 button ends with the recorded tonic-E4 phrase');
   const all = [...C.quarterEvents(0, 10), ...C.melodyOnlyEvents(),
                ...C.hourPickerEvents(12), ...C.bongsOnlyEvents(10)];

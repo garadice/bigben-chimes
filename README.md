@@ -9,7 +9,7 @@ domain), the photo is openly licensed.
 
 - 🕒 **quarter past** — the real 4-note quarter chime
 - 🕕 **half past** — the 8-note half-hour chime
-- 🕘 **quarter to** — the 12-note three-quarter chime
+- 🕘 **quarter to** — the 8-note three-quarter chime
 - 🕛 **full hour** — the complete 16-note change, melody only (no bongs)
 - 🔔 **pick an hour** — big numbers 1–12: choose one, press the big play
   button, and Big Ben rings the whole melody followed by exactly that many
@@ -46,8 +46,9 @@ may pause background tabs or locked-screen apps, so this is not an alarm clock.
 - Photo: [Diliff / Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Clock_Tower_-_Palace_of_Westminster,_London_-_May_2007.jpg), CC BY 2.5.
 - Sounds: Big Ben via the Radio Oranje New Year broadcast, 1 Jan 1945
   ([Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Westminster_chimes_(1_January_1945).wav)),
-  public domain. The quarter-past and quarter-to phrases are assembled from
-  the same recording (the broadcast does not contain the first change),
-  documented in [LICENSES.md](LICENSES.md) and [docs/DEV.md](docs/DEV.md).
+  public domain. Quarter-past is one contiguous cut of the recording's
+  fourth change and quarter-to of its fourth and fifth changes (the
+  broadcast does not contain the first change), documented in
+  [LICENSES.md](LICENSES.md) and [docs/DEV.md](docs/DEV.md).
 
 Code: MIT — © 2026 Martin Mogis. No ads, no tracking, no network calls.

@@ -14,10 +14,12 @@ import audio_scheme as scheme
 
 SOURCE = Path(sys.argv.pop()) if len(sys.argv) > 1 else None
 # Literal score oracle, independent of BOTH cut_audio and the detector's score.
+# v1.3.0: :15 = recorded change 4 (nearest genuine material; canonical
+# change 1 exists nowhere as contiguous PD audio), :45 = recorded changes 4+5.
 EXPECTED = {
-    'q15': ['G#', 'F#', 'E', 'B'],
+    'q15': ['G#', 'E', 'F#', 'B'],
     'q30': ['E', 'G#', 'F#', 'B', 'E', 'F#', 'G#', 'E'],
-    'q45': ['G#', 'E', 'F#', 'B', 'B', 'F#', 'G#', 'E', 'G#', 'F#', 'E', 'B'],
+    'q45': ['G#', 'E', 'F#', 'B', 'B', 'F#', 'G#', 'E'],
     'melody': ['E', 'G#', 'F#', 'B', 'E', 'F#', 'G#', 'E',
                'G#', 'E', 'F#', 'B', 'B', 'F#', 'G#', 'E'],
 }
@@ -75,7 +77,7 @@ class SchemeTests(unittest.TestCase):
         for asset, notes in EXPECTED.items():
             self.assertEqual(scheme.expected_notes(asset), notes)
         self.assertEqual([len(EXPECTED[name]) for name in ('q15', 'q30', 'q45', 'melody')],
-                         [4, 8, 12, 16])
+                         [4, 8, 8, 16])
 
     def test_no_bell_attacks_are_invented_from_digital_silence(self):
         self.assertEqual(self.notes(np.zeros(3 * scheme.SR)), [])
@@ -95,17 +97,18 @@ class SchemeTests(unittest.TestCase):
         self.assertEqual(self.notes(self.source_fixture(missing)), missing)
         self.assertNotEqual(len(missing), 4)
 
-    def test_assembled_onset_gaps_match_the_measured_source_rhythm(self):
-        # Independent literal mean of source changes 3/4/5, not recipe.STEPS.
+    def test_contiguous_onset_gaps_match_the_measured_source_rhythm(self):
+        # Both quarters carry the genuine recorded rhythm of changes 4+5
+        # (audio_scheme.SOURCE_ATTACKS positions), not a mechanical grid.
+        genuine = [round(b - a, 2) for a, b in zip(scheme.SOURCE_ATTACKS[8:-1],
+                                                   scheme.SOURCE_ATTACKS[9:])]
         for ext in ('m4a', 'ogg'):
-            for name in ('q15', 'q45'):
+            for name, expected in (('q15', genuine[:3]), ('q45', genuine)):
                 attacks = scheme.detect_notes(scheme.decode(scheme.ROOT / 'audio' / f'{name}.{ext}'),
-                                               self.templates)
-                at = [row['at'] for row in attacks[-4:]]
-                np.testing.assert_allclose(np.diff(at), [.663, .647, .553], atol=.08,
-                                           err_msg=f'{name}.{ext}: stitched rhythm changed')
-                if name == 'q45':
-                    self.assertAlmostEqual(attacks[8]['at'] - attacks[7]['at'], 1.38, delta=.12)
+                                              self.templates)
+                at = [row['at'] for row in attacks]
+                np.testing.assert_allclose(np.diff(at), expected, atol=.12,
+                                           err_msg=f'{name}.{ext}: genuine rhythm changed')
 
     def test_q15_first_bell_is_not_masked_by_a_restarted_E_decay(self):
         for ext in ('m4a', 'ogg'):

@@ -8,8 +8,9 @@ attribution shown here and in the app footer.
 
 All audio assets derive from ONE public-domain source recording (details
 below). Contiguous cuts have AAC 160 kbps `.m4a` + Vorbis q6 `.ogg`
-encodings and short de-click fades. The assembled quarter assets (`q15`,
-`q45`) are built offline from the same recording at natural levels.
+encodings and short de-click fades. All shipped assets — including the
+quarter assets (`q15`, `q45`) since v1.3.0 — are pure contiguous cuts of
+the same recording, built offline at natural levels.
 All assets, including the hour strike, target −3 dBFS before encoding.
 
 ## Source recording (all `audio/*` files)
@@ -31,22 +32,24 @@ All assets, including the hour strike, target −3 dBFS before encoding.
 |---|---|---|
 | `melody.*` | **complete recorded 16-note hour chime**, changes 2+3+4+5 and tonic ring-out, 20.80 s | source 0.25–21.05 s |
 | `q30.*` | recorded changes 2+3, 8 notes, 7.23 s | source 0.25–7.48 s |
-| `q15.*` | **change 1 (G#4 F#4 E4 B3)** — four real source-note cuts, cleaner opening G#, 300 ms quiet natural room-tone lead-in and final room-tone dissolve, 3.753854 s before codec padding. Not a cut of the q45 base | source-note windows 7.598–8.195, 2.170–2.945, 0.250–1.395, 2.940–4.390 s + room tone at 19.95 s |
-| `q45.*` | **recorded changes 4+5 joined to the assembled change 1**, correctly twelve notes, at the measured 1.38 s attack gap; the original E keeps ringing underneath, 10.061854 s before codec padding | source 7.50–14.47 s + the same four change-1 source-note cuts; insert begins at asset time 6.558 s |
+| `q15.*` | **recorded change 4 (G#4 E4 F#4 B3)** — one contiguous source cut, 300 ms quiet natural room-tone lead-in, 4 genuine notes, 3.582 s before codec padding. The canonical change 1 exists nowhere as contiguous PD audio | source 7.598–10.88 s + room tone at ~19.95 s |
+| `q45.*` | **recorded changes 4+5** — one contiguous source cut, 8 genuine notes, 6.97 s before codec padding. The canonical 12-note third quarter needs change 1 and is abandoned, not assembled | source 7.50–14.47 s |
 | `bong.*` | ONE hour strike + natural decay, 3.43 s | source 41.47–44.90 s |
 
-The broadcast does not contain change 1, so the quarter-past and
-quarter-to phrases cannot be cut contiguously from it. v1.2.0 assembled
-them offline (`tools/cut_audio.py`, numpy/scipy) instead of stitching
-per-note slices at runtime: sample-accurate measured rhythm, tails ringing
-under the next attack, natural note levels, no per-slice normalization.
-v1.2.1 copied :45's ending into :15 under an approval that Martin later
-retracted; both sounded wrong. v1.2.2 instead shares the raw source-note
-insert and preserves the original base E only in :45. The old opening G#
-slice carried a loud E decay: it is replaced with the cleaner G# recorded
-at 7.61 s. No note synthesis, pitch-shifting, time-stretching or other audio
+The broadcast does not contain change 1, so the canonical quarter-past
+phrase cannot be cut contiguously from it, and v1.2.0–v1.2.2 assembled
+the missing material offline (`tools/cut_audio.py`, numpy/scipy) instead
+of stitching per-note slices at runtime: sample-accurate measured rhythm,
+tails ringing under the next attack, natural note levels, no per-slice
+normalization. v1.2.1 copied :45's ending into :15 under an approval that
+Martin later retracted; v1.2.2 replaced the old opening G# slice (it
+carried a loud E decay) with the cleaner G# recorded at 7.61 s. Both
+assembled quarters were still rejected by ear (round 4, 2026-11-20), so
+v1.3.0 abandoned ALL assembled change-1 material and ships only genuine
+contiguous cuts: quarter-past = change 4, quarter-to = changes 4+5.
+No note synthesis, pitch-shifting, time-stretching or other audio
 source is used. `docs/DEV.md` documents the independent score check,
-source provenance, decoded spectra, rhythm and before/after measurements.
+source provenance, decoded spectra, rhythm and measurements.
 Those checks do not establish an audible phone-listen approval; Martin's
 ear remains the final acceptance. The former runtime note assets (`n-*`)
 and `q45a` chunk were removed in v1.2.0.
@@ -92,5 +95,6 @@ and `q45a` chunk were removed in v1.2.0.
   demonstration, Vierne organ composition, a Gdańsk museum tower clock,
   spoken audio description, MIDI files). This search found no usable new source.
 - Synthesised bell tones for the missing phrases — rejected on principle:
-  the product is REAL Big Ben. The missing change is assembled from
-  recorded bell material instead (see `docs/DEV.md`).
+  the product is REAL Big Ben. v1.2.0–v1.2.2 assembled the missing change
+  from recorded bell material (also rejected by ear); v1.3.0 ships only
+  genuine contiguous cuts of change 4 and changes 4+5 (see `docs/DEV.md`).

@@ -127,7 +127,7 @@ test('first automatic quarter waits for its gesture unlock before scheduling', a
   assert.equal(h.timers.size, 0, 'the auto button must also wait for priming');
   h.resolveAudio();
   await h.settle();
-  assert.equal(h.timers.size, 1, ':15 is one assembled asset event');
+  assert.equal(h.timers.size, 1, ':15 is one contiguous asset event');
 });
 
 test('automatic marks before any gesture are consumed without false playback', () => {
@@ -144,7 +144,7 @@ test('the playQuarter test hook actually starts the requested quarter', async ()
   h.app.playQuarter(1);
   h.resolveAudio();
   await h.settle();
-  assert.equal(h.timers.size, 1, ':15 plays one assembled asset');
+  assert.equal(h.timers.size, 1, ':15 plays one contiguous asset');
 });
 
 for (let n = 1; n <= 12; n++) {

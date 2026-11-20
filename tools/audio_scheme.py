@@ -28,7 +28,10 @@ CHANGES = {
     4: ('G#', 'E', 'F#', 'B'),
     5: ('B', 'F#', 'G#', 'E'),
 }
-QUARTERS = {'q15': (1,), 'q30': (2, 3), 'q45': (4, 5, 1), 'melody': (2, 3, 4, 5)}
+# v1.3.0: :15 and :45 are contiguous cuts (change 4; changes 4+5). Canonical
+# change 1 exists nowhere as contiguous PD audio; assembled material is
+# abandoned (docs/DEV.md, round-4 verdict).
+QUARTERS = {'q15': (4,), 'q30': (2, 3), 'q45': (4, 5), 'melody': (2, 3, 4, 5)}
 NOTES = ('E', 'G#', 'F#', 'B')
 CONCERT_HZ = {'G#': 415.30, 'F#': 369.99, 'E': 329.63, 'B': 246.94}
 # Reference attacks picked from the intact source, not the assembly recipe.
@@ -176,6 +179,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path)
     parser.add_argument('--out', type=Path, default=ROOT / 'tools/analysis')
-    parser.add_argument('--label', default='v1.2.2')
+    parser.add_argument('--label', default='v1.3.0')
     args = parser.parse_args()
     report(args.source, args.out, args.label)
