@@ -3,8 +3,85 @@
 Static HTML/CSS/JS; no build, runtime dependencies, trackers, external fonts,
 or runtime API calls. Serve the repository as-is. The service worker caches
 all local photo/audio/icon/shell files. Keep `CACHE` different from the last
-**published** release. This local candidate is `bigben-chimes-v1.3.1`;
+**published** release. This local candidate is `bigben-chimes-v1.4.0`;
 push/deploy belongs to main after the independent verifier gate.
+
+## v1.4.0: ZVONKY play screen (5 big bells + 11-bell keyboard)
+
+Martin's decided two-mode design (implemented as chosen, not re-opened):
+MODE A = five huge bells — the tower's REAL quarter instrument (B3, E4,
+F#4, G#4 per chime.js) plus a visually dominant GREAT BELL; MODE B = an
+11-key bell keyboard, B3…E5 diatonic E major (every Westminster change
+lands on keys, so anything the kid plays fits the chime world), number
+badges 1–11. Entry: a new 🎹 square in the right-edge pad. Kid-first: no
+reading anywhere — icons, colors, numbers; swing/glow press animation +
+60 ms vibration per strike.
+
+- **Bell → pitch provenance (measured, not assumed).** The Lurie Carillon
+  set (CC BY 4.0, see LICENSES.md) ships 60 chromatic samples
+  `LT_10_10_00`–`59`; the set is ET-tuned and adjacent bells measure one
+  semitone apart (hum ladder anchored at bell 00 = G2, measured 2026-11-21).
+  Each target note uses the chromatically exact bell; the measured strike
+  nominals sit within ±7 cents of equal temperament, so NOTHING is retuned:
+
+  | key | sample | measured nominal | cents vs ET |
+  |---|---|---|---|
+  | B3  | LT_10_10_03 | 246.6 Hz | −2.2 |
+  | C#4 | LT_10_10_05 | 276.6 Hz | −3.8 |
+  | D#4 | LT_10_10_07 | 310.2 Hz | −5.1 |
+  | E4  | LT_10_10_08 | 329.4 Hz | −1.3 |
+  | F#4 | LT_10_10_10 | 371.4 Hz | +6.8 |
+  | G#4 | LT_10_10_12 | 414.5 Hz | −3.3 |
+  | A4  | LT_10_10_13 | 439.7 Hz | −1.0 |
+  | B4  | LT_10_10_15 | 493.9 Hz | +0.1 |
+  | C#5 | LT_10_10_17 | 554.8 Hz | +1.4 |
+  | D#5 | LT_10_10_19 | 621.4 Hz | −2.3 |
+  | E5  | LT_10_10_20 | 659.8 Hz | +1.4 |
+
+  Measurement method: 1.5 s attack window, 2^17-point periodogram, the
+  strongest peak near the expected ET pitch (where that partial is weak in
+  the attack window — bells 15/17/19 — the same partial role one octave
+  up/down identifies it). Rebuild assets with
+  `/usr/bin/python3 tools/make_bells.py <Lurie_sample_dir>`: trim to the
+  natural decay (level fell 30 dB below its own peak RMS, clamped 2.5–5 s;
+  these big bells all hit the 5 s cap), −3 dBFS peak, 8 ms de-click in,
+  80 ms fade-out, dual encode AAC 160k + Vorbis q6 — the cut_audio.py
+  conventions.
+- **Great Bell** = `audio/bong.*` reused (the genuine 1945 PD recording).
+  No new asset; the keyboard engine decodes the same file.
+- **Playback engine** (app.js): Web Audio API, NOT HTMLAudio clones.
+  `decodeAudioData` buffers fetched/decoded lazily on the FIRST overlay
+  open (mode A files start first, remaining keys decode behind); presses
+  spawn buffer-source voices into a per-voice chain ending in a
+  DynamicsCompressor → master gain → destination, so mashing all 11 keys
+  cannot clip. The master gain IS the global mute + volume slider
+  (`applyVolume` rewrites it live); the global STOP button (and the
+  overlay's own ✋) call `bellAudio.stopAll()` — instant silence, same
+  semantics as chimes. A pure FIFO voice ledger (bells.js, max 16) bounds
+  runaway mashing; natural voice ends release themselves.
+- **Modal overlay** follows the hour-picker pattern: `role=dialog
+  aria-modal`, `inert` background (`.dial`, `.pad`, `.volwrap`), focus to ✕
+  on open, Escape closes, Tab traps, focus returns to the opener. Mode is
+  a session-scoped variable (deliberately NOT localStorage: the spec says
+  "persists for the session"). Scheduled auto-chimes keep ringing behind
+  the overlay and, by design, do NOT kill the kid's bell voices — only
+  STOP (and the ledger) stop bells.
+- **Layout contract** (styles.css + bells.js `keyRows`): the DOM ships two
+  `.krow` row containers (6 + 5 keys); portrait shows them as two
+  staggered rows, landscape flattens them with `display: contents` into
+  one full-width row of taller keys. Every key/bell is ≥44 px in both
+  orientations (browser-tested at 320×568 … 844×390 … 1280×800). The pad
+  column grows to nine squares with the 🎹 entry, so screens ≤700 px in
+  the short dimension shrink the squares to 52 px (still ≥44 px targets)
+  to keep the whole column inside 320×568/568×320.
+- **Release lockstep** moved together: sw.js CACHE `bigben-chimes-v1.4.0`
+  (+22 new audio assets + bells.js in the precache), app.js VERSION
+  `1.4.0`, tools/sw_test.js harness key, tools/app_test.js VERSION
+  tripwire, tools/browser_test.cjs (revision pin = the PREVIOUS release
+  commit b6f5ec0, previous-cache name v1.3.1, upgrade-target v1.4.0, and
+  the swMutate replace string), tools/scheme_test.py FROZEN re-pins for
+  app.js/styles.css/index.html, docs/DEV.md first line. New suites:
+  `node tools/bells_test.js` (44 checks).
 
 ## v1.3.1: version badge + update prompt (the stale-cache incident)
 

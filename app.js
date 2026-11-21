@@ -54,6 +54,7 @@
     players.q15.volume = muted ? 0 : volume;
     players.q45.volume = muted ? 0 : volume;
     players.bongs.forEach(function (p) { p.volume = muted ? 0 : volume; });
+    if (window.Bells) bellAudio.applyGain(); // the play screen obeys mute/volume too
   }
 
   /**
@@ -286,7 +287,9 @@
   }
 
   function closePicker() {
-    var wasOpen = pickerOpen;
+    if (!pickerOpen) return; // a closed picker owns no background state:
+    // stopPlayback() calls this while the BELLS overlay is open — clearing
+    // its inert here would un-modal the clock screen behind it (v1.4.0 round 3).
     pickerOpen = false;
     $picker.classList.remove('open');
     $btnPicker.classList.remove('on');
@@ -294,7 +297,7 @@
     pickerBackground.forEach(function (el) { el.inert = false; });
     $btnPicker.setAttribute('aria-expanded', 'false');
     $clockButton.setAttribute('aria-expanded', 'false');
-    if (wasOpen) (pickerReturnFocus || $btnPicker).focus();
+    (pickerReturnFocus || $btnPicker).focus();
   }
 
   function showArmed(n) {
@@ -347,6 +350,224 @@
       return C.hourPickerEvents(n);
     }, hideArmed, function () { showArmed(n); })();
   });
+
+  // ---------- ZVONKY play screen (v1.4.0) ----------
+  // Pure pitch/layout/voice logic lives in bells.js (window.Bells, chime.js
+  // pattern). This section is only wiring + the Web Audio engine.
+  var B = window.Bells;
+  var $btnBells = document.getElementById('btn-bells');
+  var $bells = document.getElementById('bells');
+  var $bellsClose = document.getElementById('bells-close');
+  var $bellsStop = document.getElementById('bells-stop');
+  var $bellsStage = document.getElementById('bell-stage');
+  var $bkeys = document.getElementById('bkeys');
+  var $bellsModeBig = document.getElementById('bells-mode-big');
+  var $bellsModeKeys = document.getElementById('bells-mode-keys');
+  var bellsOpen = false;
+  var bellsMode = 'big'; // persists for the SESSION (a variable, not storage)
+  var bellsReturnFocus = null;
+  var bellsPreloaded = false;
+  var bellsBackground = [document.querySelector('.dial'), document.querySelector('.pad'),
+    document.querySelector('.volwrap')];
+
+  /**
+   * Web Audio engine (NOT HTMLAudio clones): decoded buffers -> bus ->
+   * DynamicsCompressor (mashing all 11 keys must never clip) -> master gain
+   * (the global mute + volume) -> destination. The context is created
+   * lazily inside a gesture; every path is silent-safe where Web Audio or
+   * fetch is unavailable (vm harness, old browsers, offline pre-precache).
+   */
+  var bellAudio = (function () {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    var ctx = null, busIn = null, master = null;
+    var buffers = {}; // file -> AudioBuffer
+    var loading = {}; // file -> in-flight decode promise (deduped)
+    var voices = {};  // voice id -> source node
+    var ledger = B.createVoiceLedger(16); // mash-bounded polyphony
+
+    function ensureCtx() {
+      if (!AC) return null;
+      if (!ctx) {
+        try {
+          ctx = new AC();
+          busIn = ctx.createDynamicsCompressor();
+          master = ctx.createGain();
+          busIn.connect(master);
+          master.connect(ctx.destination);
+          master.gain.value = muted ? 0 : volume;
+        } catch (e) {
+          ctx = null;
+        }
+      }
+      if (ctx && ctx.state === 'suspended' && ctx.resume) ctx.resume();
+      return ctx;
+    }
+
+    function load(file) {
+      if (buffers[file]) return Promise.resolve(buffers[file]);
+      var c = ensureCtx(); // decoding needs a live context; a gesture owns this call path
+      if (!c || typeof fetch !== 'function') return Promise.resolve(null);
+      if (loading[file]) return loading[file];
+      loading[file] = fetch('audio/' + audioSrc(file)).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.arrayBuffer();
+      }).then(function (ab) {
+        return c.decodeAudioData(ab);
+      }).then(function (buf) {
+        buffers[file] = buf;
+        return buf;
+      }, function () {
+        return null; // offline before the first precache: this key stays silent-safe
+      }).then(function (buf) {
+        delete loading[file];
+        return buf;
+      });
+      return loading[file];
+    }
+
+    function stopVoice(id) {
+      var src = voices[id];
+      if (!src) return;
+      delete voices[id];
+      try { src.stop(); } catch (e) { /* already ended */ }
+    }
+
+    /** Strike one bell. Returns the voice id (0 = nothing sounded yet). */
+    function play(file) {
+      var c = ensureCtx();
+      if (!c) return 0;
+      var buf = buffers[file];
+      if (!buf) {
+        load(file); // first press may precede the decode; the next lands
+        return 0;
+      }
+      var v = ledger.acquire(file);
+      v.evicted.forEach(stopVoice);
+      var src = c.createBufferSource();
+      src.buffer = buf;
+      src.connect(busIn);
+      src.onended = function () {
+        ledger.release(v.id);
+        delete voices[v.id];
+      };
+      voices[v.id] = src;
+      try {
+        src.start();
+      } catch (e) {
+        ledger.release(v.id);
+        delete voices[v.id];
+        return 0;
+      }
+      return v.id;
+    }
+
+    /** Mode A first, the remaining keys decode in the background. */
+    function preload() {
+      B.QUARTER_BELLS.forEach(function (b) { load(b.file); });
+      load(B.GREAT_BELL.file);
+      B.KEYBOARD_NOTES.forEach(function (n) { load(n.file); });
+    }
+
+    return {
+      play: play,
+      load: load,
+      preload: preload,
+      applyGain: function () { if (master) master.gain.value = muted ? 0 : volume; },
+      stopAll: function () { ledger.stopAll().forEach(stopVoice); },
+      activeCount: function () { return ledger.count(); },
+      loadedCount: function () { return Object.keys(buffers).length; }
+    };
+  })();
+
+  /** Strike + kid feedback: instant sound, buzz, swing-and-glow animation. */
+  function bellHit(file, button) {
+    bellAudio.play(file);
+    try {
+      if (navigator.vibrate) navigator.vibrate(60);
+    } catch (e) { /* no vibration support — fine */ }
+    if (button) {
+      button.classList.remove('hit');
+      void button.offsetWidth; // restart the swing even on machine-gun taps
+      button.classList.add('hit');
+    }
+  }
+
+  function setBellsMode(mode) {
+    bellsMode = mode === 'keys' ? 'keys' : 'big';
+    var keys = bellsMode === 'keys';
+    $bkeys.hidden = !keys;
+    $bellsStage.hidden = keys;
+    $bellsModeBig.setAttribute('aria-pressed', String(bellsMode === 'big'));
+    $bellsModeKeys.setAttribute('aria-pressed', String(keys));
+  }
+
+  function preloadBells() {
+    if (bellsPreloaded) return;
+    bellsPreloaded = true;
+    bellAudio.preload();
+  }
+
+  function openBells() {
+    if (bellsOpen) return;
+    bellsReturnFocus = document.activeElement;
+    bellsOpen = true;
+    $bells.classList.add('open');
+    $btnBells.classList.add('on');
+    $bells.setAttribute('aria-hidden', 'false');
+    bellsBackground.forEach(function (el) { el.inert = true; });
+    $btnBells.setAttribute('aria-expanded', 'true');
+    setBellsMode(bellsMode); // the chosen mode persists for the session
+    preloadBells();          // mode A sounds ready immediately, keys follow
+    $bellsClose.focus();
+  }
+
+  function closeBells() {
+    var wasOpen = bellsOpen;
+    bellsOpen = false;
+    $bells.classList.remove('open');
+    $btnBells.classList.remove('on');
+    $bells.setAttribute('aria-hidden', 'true');
+    bellsBackground.forEach(function (el) { el.inert = false; });
+    $btnBells.setAttribute('aria-expanded', 'false');
+    if (wasOpen) (bellsReturnFocus || $btnBells).focus();
+  }
+
+  $btnBells.addEventListener('click', function () {
+    if (bellsOpen) closeBells(); else openBells();
+  });
+  $bellsClose.addEventListener('click', closeBells);
+  $bellsStop.addEventListener('click', stopPlayback); // silences chimes AND bells
+  $bellsModeBig.addEventListener('click', function () { setBellsMode('big'); });
+  $bellsModeKeys.addEventListener('click', function () { setBellsMode('keys'); });
+  $bells.addEventListener('keydown', function (event) {
+    if (!bellsOpen) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeBells();
+    } else if (event.key === 'Tab') {
+      var buttons = $bells.querySelectorAll('button');
+      var first = buttons[0], last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    }
+  });
+
+  (function () {
+    // pointerdown, not click: a kid's machine-gun mashing needs zero latency,
+    // and separate touch points (two thumbs) each fire their own press.
+    function wire(file, id) {
+      var button = document.getElementById(id);
+      if (!button) return;
+      button.addEventListener('pointerdown', function () { bellHit(file, button); });
+      button.addEventListener('animationend', function () { button.classList.remove('hit'); });
+    }
+    wire(B.GREAT_BELL.file, 'bell-great');
+    B.QUARTER_BELLS.forEach(function (b) { wire(b.file, 'bell-' + b.id); });
+    B.KEYBOARD_NOTES.forEach(function (n) { wire(n.file, 'key-' + n.id); });
+  })();
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -423,6 +644,7 @@
     pickerHour = null;
     renderPicker();
     closePicker();
+    if (window.Bells) bellAudio.stopAll(); // STOP silences the bells instantly too
     cancelAll();
     $btnStop.classList.remove('pressed');
     void $btnStop.offsetWidth; // restart the pulse animation
@@ -467,7 +689,7 @@
   // CACHE ('bigben-chimes-vX.Y.Z') is bumped by hand in the SAME change and
   // app_test.js asserts the pairing. A visible version answers "which build
   // am I hearing?" — the v1.3.0 stale-cache incident had no way to tell.
-  var VERSION = '1.3.1';
+  var VERSION = '1.4.0';
   var $version = document.getElementById('version');
   var $update = document.getElementById('update-banner');
   var updateReady = false; // a newer release is installed, waiting to load
@@ -475,6 +697,7 @@
   var IDLE_RELOAD_MS = 60000;
 
   function anythingPlaying() {
+    if (window.Bells && bellAudio.activeCount() > 0) return true;
     var all = [players.melody, players.q30, players.q15, players.q45]
       .concat(players.bongs);
     for (var i = 0; i < all.length; i++) {
@@ -566,6 +789,17 @@
     pickerState: function () { return { open: pickerOpen, hour: pickerHour }; },
     openPicker: openPicker,
     closePicker: closePicker,
+    bells: {
+      state: function () {
+        return { open: bellsOpen, mode: bellsMode,
+                 active: bellAudio.activeCount(), loaded: bellAudio.loadedCount() };
+      },
+      open: openBells,
+      close: closeBells,
+      setMode: setBellsMode,
+      press: function (file) { return bellAudio.play(file); }, // test hook: raw engine
+      stopAll: function () { bellAudio.stopAll(); }
+    },
     update: {
       state: function () {
         return {

@@ -6,13 +6,14 @@
  * deletes the old cache. That is the deploy cache-bust mechanism.
  * (Convention: coder branches ship the right starting name; main applies
  * the bump when merging/deploying, one bump per release.) */
-const CACHE = 'bigben-chimes-v1.3.1';
+const CACHE = 'bigben-chimes-v1.4.0';
 
 const ASSETS = [
   './',
   'index.html',
   'styles.css',
   'chime.js',
+  'bells.js',
   'app.js',
   'manifest.json',
   'audio/melody.m4a',
@@ -25,6 +26,28 @@ const ASSETS = [
   'audio/q30.ogg',
   'audio/q15.m4a',
   'audio/q15.ogg',
+  'audio/bell-b3.m4a',
+  'audio/bell-b3.ogg',
+  'audio/bell-cs4.m4a',
+  'audio/bell-cs4.ogg',
+  'audio/bell-ds4.m4a',
+  'audio/bell-ds4.ogg',
+  'audio/bell-e4.m4a',
+  'audio/bell-e4.ogg',
+  'audio/bell-fs4.m4a',
+  'audio/bell-fs4.ogg',
+  'audio/bell-gs4.m4a',
+  'audio/bell-gs4.ogg',
+  'audio/bell-a4.m4a',
+  'audio/bell-a4.ogg',
+  'audio/bell-b4.m4a',
+  'audio/bell-b4.ogg',
+  'audio/bell-cs5.m4a',
+  'audio/bell-cs5.ogg',
+  'audio/bell-ds5.m4a',
+  'audio/bell-ds5.ogg',
+  'audio/bell-e5.m4a',
+  'audio/bell-e5.ogg',
   'photo/bigben.jpg',
   'icons/icon-192.png',
   'icons/icon-512.png',

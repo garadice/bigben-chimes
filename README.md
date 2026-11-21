@@ -17,6 +17,14 @@ domain), the photo is openly licensed.
   visible behind the picker, and a small badge shows the chosen hour while
   it rings
 - 🛎️ **bongs only** — just the hour strikes for the current hour
+- 🎹 **ZVONKY play screen** — a fullscreen play room with two modes: five huge
+  bells (the real quarter bells B3, E4, F#, G# plus one giant Great Bell,
+  multi-touch so two thumbs make chords) and a bell keyboard of 11 diatonic
+  bells (numbers 1–11, B3…E5 in E major so everything he plays fits the
+  chime world). Rotate the phone to landscape and the keyboard becomes one
+  long row of tall keys. Real recorded carillon samples (Lurie Carillon,
+  CC BY 4.0); the Great Bell is the genuine 1945 recording. Nothing to
+  read: icons, colors and numbers only
 - ⏰ **auto** — chimes by itself every quarter hour while the app is open,
   with the real behavior: quarter melodies at :15/:30/:45, and the melody
   plus the hour bongs on the hour (at 15:00 you hear 3 bongs, at midnight
@@ -55,5 +63,8 @@ may pause background tabs or locked-screen apps, so this is not an alarm clock.
   fourth change and quarter-to of its fourth and fifth changes (the
   broadcast does not contain the first change), documented in
   [LICENSES.md](LICENSES.md) and [docs/DEV.md](docs/DEV.md).
+- ZVONKY play-screen bells: [Lurie Carillon individual samples](https://gobluebells.wordpress.com/2016/09/21/lurie-carillon-samples/),
+  Ann & Robert H. Lurie Carillon, University of Michigan (bells cast by
+  Royal Eijsbouts, recorded October 2016 by Isaac Levine et al.), CC BY 4.0.
 
 Code: MIT — © 2026 Martin Mogis. No ads, no tracking, no network calls.

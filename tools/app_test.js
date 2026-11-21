@@ -65,7 +65,7 @@ function harness(options = {}) {
   };
   context.window = context;
   vm.createContext(context);
-  for (const file of ['chime.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {filename:file});
+  for (const file of ['chime.js', 'bells.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {filename:file});
   element('update-banner').hidden = true; // index.html boots the banner hidden
   return {
     app: context.__BBC__, element, audio, timers, log,
@@ -402,9 +402,9 @@ test('the version badge renders the release and stays paired with the service-wo
   const h = harness();
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   const cache = sw.match(/const CACHE = '([^']+)'/)[1];
-  assert.equal(h.app.VERSION, '1.3.1', 'bump this tripwire in the same release as sw.js CACHE');
-  assert.equal(h.element('version').textContent, 'v1.3.1', 'the badge shows the exact version');
-  assert.equal(cache, 'bigben-chimes-v1.3.1',
+  assert.equal(h.app.VERSION, '1.4.0', 'bump this tripwire in the same release as sw.js CACHE');
+  assert.equal(h.element('version').textContent, 'v1.4.0', 'the badge shows the exact version');
+  assert.equal(cache, 'bigben-chimes-v1.4.0',
     'sw.js CACHE and app.js VERSION are a hand-synced pair — bump BOTH together');
 });
 
@@ -451,4 +451,60 @@ test('an idle page reloads after ~60 s quiet; a playing page never does', async 
   assert.equal(h2.log.filter(e => e.type === 'reload').length, 0, 'the idle clock starts at the reveal, not at boot');
   h2.advance(2000); h2.app.update.tick();
   assert.equal(h2.log.filter(e => e.type === 'reload').length, 1, 'a quiet minute after playback reloads');
+});
+
+// ---------- v1.4.0: ZVONKY play screen ----------
+
+test('the play overlay opens from the pad, is modal, and closes cleanly', () => {
+  const h = harness();
+  assert.equal(h.app.bells.state().open, false);
+  h.element('btn-bells').fire('click');
+  assert.equal(h.app.bells.state().open, true);
+  assert.equal(h.element('bells')['aria-hidden'], 'false', 'the overlay announces itself');
+  assert.equal(h.element('.pad').inert, true, 'the pad is modal-blocked while playing');
+  assert.equal(h.element('.dial').inert, true);
+  assert.equal(h.element('.volwrap').inert, true);
+  assert.equal(h.app.pickerState().open, false, 'the clock screen is unaffected');
+  h.element('bells-close').fire('click');
+  assert.equal(h.app.bells.state().open, false);
+  assert.equal(h.element('bells')['aria-hidden'], 'true');
+  assert.equal(h.element('.pad').inert, false, 'closing restores the clock screen');
+  assert.equal((h.element('btn-bells').listeners.click || []).length, 1,
+    'the pad button owns its open/close toggle');
+  assert.equal((h.element('bells-stop').listeners.click || []).length, 1,
+    'the overlay STOP is wired (v1.4.0 round-2 regression: it shipped unwired)');
+});
+
+test('the mode switch works both directions and persists for the session', () => {
+  const h = harness();
+  h.element('btn-bells').fire('click');
+  assert.equal(h.app.bells.state().mode, 'big', 'mode A is the default');
+  h.element('bells-mode-keys').fire('click');
+  assert.equal(h.app.bells.state().mode, 'keys');
+  assert.equal(h.element('bells-mode-keys')['aria-pressed'], 'true');
+  assert.equal(h.element('bells-mode-big')['aria-pressed'], 'false');
+  assert.equal(h.element('bkeys').hidden, false, 'the keyboard shows');
+  assert.equal(h.element('bell-stage').hidden, true, 'the big bells hide');
+  h.element('bells-mode-big').fire('click');
+  assert.equal(h.app.bells.state().mode, 'big');
+  h.element('bells-mode-keys').fire('click');
+  h.element('bells-close').fire('click');
+  h.element('btn-bells').fire('click');
+  assert.equal(h.app.bells.state().mode, 'keys',
+    'the chosen mode survives close/reopen within the session');
+});
+
+test('the play-screen engine is silent-safe without Web Audio and STOP covers it', () => {
+  const h = harness(); // the vm harness has no AudioContext
+  h.element('btn-bells').fire('click');
+  assert.equal(h.app.bells.press('bell-b3'), 0, 'a key press without Web Audio never throws');
+  assert.equal(h.app.bells.state().active, 0);
+  h.app.bells.stopAll();
+  h.element('btn-stop').fire('click'); // global STOP must also route to the engine
+  assert.equal(h.app.bells.state().active, 0, 'STOP leaves zero active bell voices');
+  assert.equal(h.timers.size, 0);
+  h.app.update.markReady();
+  h.app.update.tick();
+  assert.equal(h.app.update.state().visible, true,
+    'an idle (bell-silent) page still reveals the update banner');
 });

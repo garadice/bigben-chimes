@@ -22,7 +22,7 @@ const server=http.createServer(async(req,res)=>{
   if(name.startsWith('.') || name.split('/').includes('..')){res.writeHead(404).end();return;}
   serverRequests.push(name);
   let data=revision ? execFileSync('git',['show',revision+':'+name],{cwd:ROOT,maxBuffer:10000000,stdio:['ignore','pipe','pipe']}) : await fs.readFile(path.join(ROOT,name));
-  if(name==='sw.js'&&swMutate)data=Buffer.from(data.toString('utf8').replace('bigben-chimes-v1.3.1','bigben-chimes-v1.3.1-update-test'),'utf8');
+  if(name==='sw.js'&&swMutate)data=Buffer.from(data.toString('utf8').replace('bigben-chimes-v1.4.0','bigben-chimes-v1.4.0-update-test'),'utf8');
   res.writeHead(200,{'Content-Type':mime[path.extname(name)]||'application/octet-stream','Content-Length':data.length,'Cache-Control':'no-store'});res.end(data);
  }catch(e){res.writeHead(404).end();}
 });
@@ -92,6 +92,71 @@ async function pickerGeometry(page,label,width,height){
  check(await page.evaluate(()=>__BBC__.pickerState().open===false),label+' picker closes via its reachable STOP');
  await page.locator('#btn-clock').tap();await page.locator('#picker-close').tap();
 }
+async function bellsModeFlow(page,context,label,width,height){
+ const landscape=width>height;
+ // headless Chrome drives .hit's main-thread (filter) animation from the same
+ // loop as CDP tasks — recently tapped keys can be measured MID-SWING. Jump
+ // every animation to its end before taking any geometry.
+ const settle=()=>page.evaluate(()=>{document.getAnimations().forEach(a=>{try{a.finish();}catch(e){}});});
+ await page.locator('#btn-bells').tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().open),label+' bells overlay opens');
+ await page.waitForFunction(()=>__BBC__.bells.state().loaded>=12,null,{timeout:20000});
+ check(await page.evaluate(()=>__BBC__.bells.state().loaded>=12),label+' all 12 bell buffers decoded',await page.evaluate(()=>__BBC__.bells.state()));
+ // mode A geometry + census
+ await settle();
+ let inventory=await census(page,label+' bells');
+ for(const item of inventory){const r=item.rect;check(item.reachable&&r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' bells bounds and hit target '+item.selector,r);}
+ const great=await page.locator('#bell-great').boundingBox();
+ check(great.width>=44&&great.height>=44,label+' Great Bell is a kid-size target',great);
+ const qbells=await page.evaluate(()=>[...document.querySelectorAll('.qbell')].map(b=>b.getBoundingClientRect().toJSON()));
+ check(qbells.length===4,label+' the four quarter bells are present');
+ for(let i=0;i<qbells.length;i++)check(qbells[i].width>=44&&qbells[i].height>=44,label+' quarter bell '+(i+1)+' >=44px target',qbells[i]);
+ check(great.width>qbells[0].width*1.2,label+' the Great Bell is visually dominant',great);
+ await page.screenshot({path:path.join(OUT,'bells-big-'+label+'.png')});
+ // mode A really sounds (polyphonic voices), vibrates, and STOP silences
+ await page.locator('#bell-great').tap();await page.locator('#bell-b3').tap();
+ await page.locator('#bell-e4').tap();await page.locator('#bell-fs4').tap();
+ await page.locator('#bell-gs4').tap();
+ await page.waitForTimeout(70);
+ check(await page.evaluate(()=>__BBC__.bells.state().active>=2),label+' two overlapping bell voices sound');
+ check((await page.evaluate(()=>__vibration.filter(v=>v===60).length))>=5,label+' all five mode-A presses vibrate');
+ await page.locator('#bells-stop').tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().active===0),label+' overlay STOP silences bells instantly');
+ // true two-thumb multi-touch: ONE touchStart with two touch points
+ if(width===390&&height===844){
+  const k1=await page.locator('#bell-b3').boundingBox(),k2=await page.locator('#bell-gs4').boundingBox();
+  const cdp=await context.newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:k1.x+k1.width/2,y:k1.y+k1.height/2},{x:k2.x+k2.width/2,y:k2.y+k2.height/2}]});
+  await page.waitForTimeout(70);
+  const pair=await page.evaluate(()=>__BBC__.bells.state().active);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+  check(pair>=2,label+' simultaneous two-finger chord sounds 2+ voices',{pair});
+  await page.locator('#bells-stop').tap();
+ }
+ // mode B: keyboard geometry
+ await page.locator('#bells-mode-keys').tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().mode==='keys'),label+' keyboard mode selected');
+ check(await page.locator('#bkeys').evaluate(e=>!e.hidden),label+' the keyboard is shown');
+ await settle();
+ inventory=await census(page,label+' bells');
+ for(const item of inventory){const r=item.rect;check(item.reachable&&r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=width&&r.bottom<=height,label+' bells bounds and hit target '+item.selector,r);}
+ const keys=await page.evaluate(()=>[...document.querySelectorAll('.key')].filter(k=>{const r=k.getBoundingClientRect();return r.width>0&&r.height>0;}).map(k=>k.getBoundingClientRect().toJSON()));
+ check(keys.length===11,label+' all 11 keys visible in '+(landscape?'landscape':'portrait'),{count:keys.length});
+ for(let i=0;i<keys.length;i++)check(keys[i].width>=44&&keys[i].height>=44,label+' key '+(i+1)+' >=44px touch target',keys[i]);
+ const ys=[...new Set(keys.map(r=>Math.round(r.y)))];
+ check(landscape?ys.length===1:ys.length===2,label+' keyboard row model: '+(landscape?'one full-width row':'two staggered rows'),{ys});
+ if(!landscape)check(ys[1]>ys[0]+20,'portrait rows are staggered vertically',{ys});
+ await page.screenshot({path:path.join(OUT,'bells-keys-'+label+'.png')});
+ for(const id of ['key-b3','key-cs4','key-ds4','key-e4','key-fs4','key-gs4','key-a4','key-b4','key-cs5','key-ds5','key-e5'])await page.locator('#'+id).tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().active>=1),label+' every keyboard key really sounds');
+ check(await page.evaluate(()=>__BBC__.bells.state().mode==='keys'),label+' mode persists while playing');
+ await page.locator('#bells-mode-big').tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().mode==='big'),label+' switch back to big bells works');
+ await page.locator('#bells-close').tap();
+ check(await page.evaluate(()=>!__BBC__.bells.state().open),label+' the overlay closes via X');
+ const padVisible=await page.evaluate(()=>{const r=document.querySelector('.pad').getBoundingClientRect();return r.width>0;});
+ check(padVisible,label+' the clock screen is intact after closing');
+}
 async function geometry(page,context){
  for(const [width,height] of [[390,844],[375,812],[1280,800],[844,390],[568,320],[320,568]]){
   await page.setViewportSize({width,height});const label=width+'x'+height;
@@ -108,8 +173,9 @@ async function geometry(page,context){
   if(width===390||width>height)await page.screenshot({path:path.join(OUT,'layout-'+label+'.png')});
   await operateSurface(page,context,label);
   await pickerGeometry(page,label,width,height);
+  await bellsModeFlow(page,context,label,width,height);
   const operated=await page.evaluate(()=>__operated);
-  const full=controls.filter(s=>s.screen===label||s.screen===label+' picker').flatMap(s=>s.controls);
+  const full=controls.filter(s=>s.screen===label||s.screen===label+' picker'||s.screen===label+' bells').flatMap(s=>s.controls);
   check(full.every(e=>operated.includes(e.selector)),label+' every inventoried control operated',{missing:full.filter(e=>!operated.includes(e.selector)).map(e=>e.selector),count:full.length});
  }
 }
@@ -218,23 +284,23 @@ async function autoAndPersistence(page){
  await resetLog(page);await page.locator('#btn-quarter').tap();
 }
 async function offlineUpgrade(browser,base){
- revision='51da3b8';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ revision='b6f5ec0';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
- check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.3.0')),'real previous release cache installed');
+ check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.3.1')),'real previous release cache installed');
  await page.evaluate(async()=>{await caches.open('unrelated-app-v1');window.__controllerChanged=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{window.__controllerChanged=true;});});revision=null;
  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
  await page.waitForFunction(()=>window.__controllerChanged&&navigator.serviceWorker.controller.state==='activated');
  check(await page.evaluate(async()=>(await caches.keys()).includes('unrelated-app-v1')),'real upgrade preserves unrelated caches');
- const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.1'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
+ const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.4.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-bells')};});
  console.log('activated upgrade',state);
  check(state.newUI,'upgraded release actually contains the new page',state);
- check(!state.keys.includes('bigben-chimes-v1.3.0'),'activated upgrade removes the previous release cache');
- const updated=['audio/q15.m4a','audio/q15.ogg','audio/q45.m4a','audio/q45.ogg'];
- const cachedHashes=await page.evaluate(async names=>{const c=await caches.open('bigben-chimes-v1.3.1'),out={};for(const name of names){const r=await c.match(new URL(name,location.href));out[name]=r?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;}return out;},updated);
+ check(!state.keys.includes('bigben-chimes-v1.3.1'),'activated upgrade removes the previous release cache');
+ const updated=['audio/q15.m4a','audio/q15.ogg','audio/q45.m4a','audio/q45.ogg','audio/bell-b3.m4a','audio/bell-e5.ogg'];
+ const cachedHashes=await page.evaluate(async names=>{const c=await caches.open('bigben-chimes-v1.4.0'),out={};for(const name of names){const r=await c.match(new URL(name,location.href));out[name]=r?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;}return out;},updated);
  for(const name of updated){const expected=createHash('sha256').update(await fs.readFile(path.join(ROOT,name))).digest('hex');check(cachedHashes[name]===expected,'activated cache contains exact new '+name,{expected,actual:cachedHashes[name]});}
  await page.reload();await page.waitForSelector('#btn-picker');
  const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');const assets=[...sw.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
- const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.3.1');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
+ const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.4.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
  check(!missing.length&&state.count===assets.length,'all release assets cached after upgrade',{count:assets.length,missing});
  const before=serverRequests.length;await page.reload();await page.waitForTimeout(150);
  check(serverRequests.slice(before).filter(p=>p!=='sw.js').length===0,'cached reload makes no asset refetches',serverRequests.slice(before));
@@ -243,7 +309,19 @@ async function offlineUpgrade(browser,base){
  check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),'upgraded app and real audio work offline');
  check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'offline :15 uses the new contiguous asset');
  await offlineAssets(page,'AAC');
- const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.1'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
+ // v1.4.0: the bells really decode and sound from the offline release cache
+ await page.locator('#btn-bells').tap();
+ await page.waitForFunction(()=>__BBC__.bells.state().loaded>=12,null,{timeout:20000});
+ check(await page.evaluate(()=>__BBC__.bells.state().loaded>=12),'offline release decodes every bell buffer');
+ await page.locator('#bell-great').tap();await page.waitForTimeout(80);
+ check(await page.evaluate(()=>__BBC__.bells.state().active>=1),'offline Great Bell really sounds via Web Audio');
+ await page.locator('#bells-mode-keys').tap();await page.waitForTimeout(60);
+ await page.locator('#key-e5').tap();await page.waitForTimeout(80);
+ check(await page.evaluate(()=>__BBC__.bells.state().active>=1),'offline keyboard key really sounds via Web Audio');
+ await page.locator('#bells-stop').tap();
+ check(await page.evaluate(()=>__BBC__.bells.state().active===0),'offline STOP silences the bells');
+ await page.locator('#bells-close').tap();
+ const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.4.0'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
 }

@@ -36,6 +36,9 @@
     <button id="btn-bongs" class="sq" aria-label="Len bongy">
       <span class="ico" aria-hidden="true">🛎️</span>
     </button>
+    <button id="btn-bells" class="sq" aria-label="Zvony na hranie" aria-haspopup="dialog">
+      <span class="ico" aria-hidden="true">🎹</span>
+    </button>
     <button id="btn-picker" class="sq" aria-label="Vybrať hodinu a zvoníť" aria-haspopup="dialog">
       <span class="ico" aria-hidden="true">🔔</span>
     </button>
@@ -69,6 +72,57 @@
     <button id="picker-play" class="pplay" aria-disabled="true" aria-label="Zvoníť vybranú hodinu">▶</button>
   </div>
 
+  <!-- ZVONKY play screen (v1.4.0): the tower's real quarter bells + the
+       Great Bell (mode A), or an 11-bell E-major keyboard (mode B).
+       Kid-first: icons, colors and numbers only, nothing to read. -->
+  <div class="bells" id="bells" role="dialog" aria-modal="true" aria-label="Zvony na hranie" aria-hidden="true">
+    <button id="bells-close" class="pclose" aria-label="Zavrieť">✕</button>
+    <button id="bells-stop" class="pclose pstop" aria-label="Stop — hneď ticho">✋</button>
+    <div class="bmodes" role="group" aria-label="Režim hrania">
+      <button id="bells-mode-big" class="bmode" aria-pressed="true" aria-label="Veľké zvony">🔔</button>
+      <button id="bells-mode-keys" class="bmode" aria-pressed="false" aria-label="Zvonová klávesnica">🎹</button>
+    </div>
+
+    <!-- mode A: five huge bells — the Great Bell dominant -->
+    <div class="bell-stage" id="bell-stage" role="group" aria-label="Veľké zvony">
+      <button id="bell-great" class="bigbell" aria-label="Veľký zvon">
+        <span class="bico" aria-hidden="true">🔔</span>
+      </button>
+      <button id="bell-b3" class="qbell c-blue" aria-label="Zvon B3">
+        <span class="bico" aria-hidden="true">🔔</span>
+      </button>
+      <button id="bell-e4" class="qbell c-red" aria-label="Zvon E4">
+        <span class="bico" aria-hidden="true">🔔</span>
+      </button>
+      <button id="bell-fs4" class="qbell c-green" aria-label="Zvon F#4">
+        <span class="bico" aria-hidden="true">🔔</span>
+      </button>
+      <button id="bell-gs4" class="qbell c-purple" aria-label="Zvon G#4">
+        <span class="bico" aria-hidden="true">🔔</span>
+      </button>
+    </div>
+
+    <!-- mode B: 11 numbered diatonic bells B3…E5; portrait = two staggered
+         rows (6+5), landscape = one full-width row (display:contents) -->
+    <div class="bkeys" id="bkeys" role="group" aria-label="Zvonová klávesnica" hidden>
+      <div class="krow">
+        <button id="key-b3" class="key c-blue" aria-label="Zvon 1 (B3)"><span class="num" aria-hidden="true">1</span></button>
+        <button id="key-cs4" class="key c-pink" aria-label="Zvon 2 (C#4)"><span class="num" aria-hidden="true">2</span></button>
+        <button id="key-ds4" class="key c-orange" aria-label="Zvon 3 (D#4)"><span class="num" aria-hidden="true">3</span></button>
+        <button id="key-e4" class="key c-red" aria-label="Zvon 4 (E4)"><span class="num" aria-hidden="true">4</span></button>
+        <button id="key-fs4" class="key c-green" aria-label="Zvon 5 (F#4)"><span class="num" aria-hidden="true">5</span></button>
+        <button id="key-gs4" class="key c-purple" aria-label="Zvon 6 (G#4)"><span class="num" aria-hidden="true">6</span></button>
+      </div>
+      <div class="krow krow-b">
+        <button id="key-a4" class="key c-teal" aria-label="Zvon 7 (A4)"><span class="num" aria-hidden="true">7</span></button>
+        <button id="key-b4" class="key c-blue2" aria-label="Zvon 8 (B4)"><span class="num" aria-hidden="true">8</span></button>
+        <button id="key-cs5" class="key c-pink2" aria-label="Zvon 9 (C#5)"><span class="num" aria-hidden="true">9</span></button>
+        <button id="key-ds5" class="key c-orange2" aria-label="Zvon 10 (D#5)"><span class="num" aria-hidden="true">10</span></button>
+        <button id="key-e5" class="key c-red2" aria-label="Zvon 11 (E5)"><span class="num" aria-hidden="true">11</span></button>
+      </div>
+    </div>
+  </div>
+
   <div class="volwrap">
     <button id="btn-mute" aria-label="Ticho">🔊</button>
     <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Hlasitosť">
@@ -81,9 +135,12 @@
   <p class="credit">📷 Diliff · zmenšené · CC BY 2.5<br>
     https://creativecommons.org/licenses/by/2.5/<br>
     🔔 Radio Oranje · 1. 1. 1945 · PD<br>
+    🔔 Zvony na hranie: Lurie Carillon, Univ. of Michigan · CC BY 4.0<br>
+    https://creativecommons.org/licenses/by/4.0/<br>
     <span id="version"></span></p>
 
   <script src="chime.js"></script>
+  <script src="bells.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
