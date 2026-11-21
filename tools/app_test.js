@@ -56,14 +56,17 @@ function harness(options = {}) {
       createElement: () => ({canPlayType: () => 'probably'}),
       addEventListener: (...args) => element('document').addEventListener(...args)
     },
-    Audio, Date: ClockDate, navigator: {}, location: {protocol: 'http:', hostname: '127.0.0.1'},
+    Audio, Date: ClockDate, navigator: {},
     localStorage: {getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value)},
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, {fn, ms}); return id; },
-    clearTimeout(id) { timers.delete(id); }, setInterval() {}, console
+    clearTimeout(id) { timers.delete(id); }, setInterval() {}, console,
+    // location.reload is the update-banner's end of the world; tests observe it
+    location: {protocol: 'http:', hostname: '127.0.0.1', reload() { log.push({type: 'reload'}); }}
   };
   context.window = context;
   vm.createContext(context);
   for (const file of ['chime.js', 'app.js']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), context, {filename:file});
+  element('update-banner').hidden = true; // index.html boots the banner hidden
   return {
     app: context.__BBC__, element, audio, timers, log,
     advance(ms) { clock += ms; },
@@ -391,4 +394,61 @@ test('concurrent unlock callers wait for the same in-flight audio sweep', async 
   assert.equal(first, true);
   assert.equal(second, true);
   assert.equal(h.audio.length, h.log.filter(e => e.type === 'play').length);
+});
+
+// ---------- v1.3.1: version badge + update prompt ----------
+
+test('the version badge renders the release and stays paired with the service-worker cache', () => {
+  const h = harness();
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const cache = sw.match(/const CACHE = '([^']+)'/)[1];
+  assert.equal(h.app.VERSION, '1.3.1', 'bump this tripwire in the same release as sw.js CACHE');
+  assert.equal(h.element('version').textContent, 'v1.3.1', 'the badge shows the exact version');
+  assert.equal(cache, 'bigben-chimes-v1.3.1',
+    'sw.js CACHE and app.js VERSION are a hand-synced pair — bump BOTH together');
+});
+
+test('an update landing during playback stays hidden until the sound stops', async () => {
+  const h = harness();
+  h.app.playEvents([{file: 'q15', at: 0}]);
+  h.runTimers();
+  h.resolveAudio();
+  await h.settle();
+  h.app.update.markReady();
+  assert.equal(h.app.update.state().ready, true);
+  assert.equal(h.app.update.state().visible, false, 'no banner while a chime rings');
+  h.app.update.tick();
+  assert.equal(h.app.update.state().visible, false, 'the 1 s heartbeat keeps it hidden while playing');
+  h.app.cancelAll();
+  await h.settle();
+  h.app.update.tick();
+  assert.equal(h.app.update.state().visible, true, 'quiet reveals the banner');
+  assert.deepEqual(h.log.filter(e => e.type === 'reload'), [], 'revealing never reloads by itself');
+});
+
+test('an idle page reloads after ~60 s quiet; a playing page never does', async () => {
+  const h = harness();
+  h.app.update.markReady(); // idle: banner shows immediately, idle clock starts
+  h.advance(59000); h.app.update.tick();
+  assert.equal(h.log.filter(e => e.type === 'reload').length, 0, 'the full quiet minute must elapse first');
+  h.advance(2000); h.app.update.tick();
+  assert.equal(h.log.filter(e => e.type === 'reload').length, 1, '~60 s of quiet reloads onto the update');
+  assert.equal(h.app.update.state().visible, true);
+
+  const h2 = harness();
+  h2.app.playEvents([{file: 'melody', at: 0}]);
+  h2.runTimers();
+  h2.resolveAudio();
+  await h2.settle();
+  h2.app.update.markReady();
+  h2.advance(120000); h2.app.update.tick(); // two minutes of playback must not count as idle
+  assert.deepEqual(h2.log.filter(e => e.type === 'reload'), [], 'a chime is never interrupted');
+  h2.app.cancelAll();
+  await h2.settle();
+  h2.app.update.tick(); // the heartbeat reveals the banner right after silence
+  assert.equal(h2.app.update.state().visible, true);
+  h2.advance(59000); h2.app.update.tick();
+  assert.equal(h2.log.filter(e => e.type === 'reload').length, 0, 'the idle clock starts at the reveal, not at boot');
+  h2.advance(2000); h2.app.update.tick();
+  assert.equal(h2.log.filter(e => e.type === 'reload').length, 1, 'a quiet minute after playback reloads');
 });

@@ -3,8 +3,56 @@
 Static HTML/CSS/JS; no build, runtime dependencies, trackers, external fonts,
 or runtime API calls. Serve the repository as-is. The service worker caches
 all local photo/audio/icon/shell files. Keep `CACHE` different from the last
-**published** release. This local candidate is `bigben-chimes-v1.3.0`;
+**published** release. This local candidate is `bigben-chimes-v1.3.1`;
 push/deploy belongs to main after the independent verifier gate.
+
+## v1.3.1: version badge + update prompt (the stale-cache incident)
+
+v1.3.0 was perfect on fresh clients, but Martin's long-lived window kept
+playing OLD cached audio and reported "nothing changed": nothing on screen
+said which build was running, and an open window never learned that an
+update existed. v1.3.1 fixes both, with the audio and chime behavior fully
+frozen (every asset byte-identical to `51da3b8`; chime.js and manifest.json
+untouched).
+
+- **Version badge** — `VERSION` in app.js is the single source of truth;
+  it renders into `#version`, the last line of the bottom-left credit
+  block (tiny, always visible, out of the thumb path). `sw.js`'s `CACHE`
+  (`bigben-chimes-vX.Y.Z`) is hand-synced to it, and app_test.js asserts
+  the pairing with a hardcoded tripwire that must be bumped each release.
+- **Update detection** — the app registers `sw.js` and announces an
+  installed upgrade via BOTH `registration.onupdatefound` (installing
+  worker reaches `installed` while a controller exists) and
+  `controllerchange` (the new worker claims the page). The standard guard
+  — only treat it as an update when `navigator.serviceWorker.controller`
+  already existed at load — keeps a FIRST install's claim from looking
+  like an update (no reload loops on first visit).
+- **The banner** — `#update-banner`, "🔔 NOVÁ VERZIA — klepni", a huge
+  center-screen tap target (tap = `location.reload()`). It is revealed by
+  the 1 s heartbeat (`updateTick`) ONLY on a quiet screen: while any
+  player is active the banner stays hidden and the idle clock resets, so
+  a chime or bong is never interrupted — visually or by sound. After
+  ~60 s of CONTINUED quiet the page reloads itself; otherwise it waits
+  for the tap forever.
+- **One-time gap** — windows still running v1.3.0 carry no detection code
+  and announce nothing. They need ONE manual reload (or a browser
+  restart) to get onto the v1.3.1 train; every release after that
+  self-announces on already-open windows.
+- **Release lockstep** (all in ONE change): `sw.js` CACHE ·
+  `tools/sw_test.js` harness key · `tools/browser_test.cjs` (revision pin
+  = the PREVIOUS release commit, previous-cache name ×2, upgrade-target
+  cache ×3, and the `swMutate` replace string) · `tools/app_test.js`
+  VERSION tripwire · `tools/scheme_test.py` FROZEN re-pin for every
+  changed shell file · this file's first line.
+- **New contracts** — app_test: banner hidden while playing, reveal on
+  quiet, idle-reload timing (59 s no / 61 s yes), chime never
+  interrupted. browser_test (`updateBanner` scenario): a REAL simulated
+  update — the dev server mutates sw.js's CACHE name and calls
+  `registration.update()` while the melody rings; banner must NOT appear
+  during playback, appears after STOP, is a reachable ≥56 px target, tap
+  reloads onto the new release, and the page really runs the freshly
+  installed update worker. Six-viewport geometry now also asserts the
+  badge format and that the banner stays hidden while idle.
 
 ## v1.3.0: round-4 verdict — every assembled asset sounds wrong, so :15/:45 are now pure contiguous cuts
 
@@ -225,10 +273,13 @@ node --test tools/app_test.js tools/audio_contract_test.js tools/sw_test.js
 PLAYWRIGHT_MODULE=/path/to/playwright BBC_EVIDENCE_DIR=/path/to/evidence node tools/browser_test.cjs
 ```
 
-Verified results for this candidate:
+Verified results for this candidate (2026-11-21, v1.3.1):
 
 - Timeline/scheduler: **151 passed**.
-- App/timeline/cache contracts: **95 passed**.
+- App/timeline/cache contracts: **98 passed** (95 existing + three
+  update-flow contracts: the VERSION↔CACHE pairing tripwire, the banner
+  hidden-while-playing/reveal-on-quiet state machine, and the idle-reload
+  timing with a chime never interrupted).
 - Decoded stereo/provenance/gain/tail/strike tests: **14 passed**. The
   assembled-insert contracts are replaced by whole-asset source provenance
   at one gain (q15 and q45), q15≡q45 prefix identity at a constant offset,
@@ -236,18 +287,30 @@ Verified results for this candidate:
 - Independent scheme suite: **17 passed**, including all four quarters in
   both codecs (4/8/8/16 notes), all 16 source notes,
   wrong-order/missing/extra-note detector fixtures, silence, actual
-  first-note masking, genuine recorded rhythm and frozen bytes.
-- Real Chrome: **473/473 checks** (468 existing + five upgrade checks).
-  Six viewports, 11 main controls + 15 picker controls each, every control
-  operated; all 12 picker hours; full real 12-strike playback; STOP and cold
-  unlock races; all five sound types offline in AAC and Vorbis.
-- Real v1.2.2→v1.3.0 cache upgrade waits for controllerchange/activated,
+  first-note masking, genuine recorded rhythm and frozen bytes (all six
+  pinned audio encodings, chime.js and manifest.json verified
+  byte-identical; app.js/styles.css/index.html re-pinned to this release).
+- Real Chrome: **492/492 checks, zero errors** (473 existing + seven
+  `updateBanner` scenario checks + twelve badge/banner-quiet checks across
+  the six viewports). Six viewports, 11 main controls + 15 picker controls
+  each, every control operated; all 12 picker hours; full real 12-strike
+  playback; STOP and cold unlock races; all five sound types offline in
+  AAC and Vorbis.
+- Real v1.3.0→v1.3.1 cache upgrade waits for controllerchange/activated,
   removes only old app caches, preserves an unrelated cache, checks all
-  21 release entries and exact SHA-256 bodies of all four changed audio files,
-  then exercises offline playback and cached byte ranges.
+  21 release entries and the exact SHA-256 bodies of the four
+  contiguous-cut audio files (unchanged this release, so the check is
+  also an end-to-end freeze proof), then exercises offline playback and
+  cached byte ranges.
+- Real simulated update ON THE CANDIDATE ITSELF: the dev server mutates
+  sw.js's CACHE name and calls `registration.update()` while the melody
+  rings — the upgrade is detected during playback with the banner
+  suppressed, the banner appears only after STOP, is a reachable 202 px
+  tap target, and tapping it reloads onto a page actually controlled by
+  the freshly installed update worker.
 
 These gates run against the **local unpushed candidate**, as required by
-the no-deploy instruction. They are not production v1.3.0 verification.
+the no-deploy instruction. They are not production v1.3.1 verification.
 Headless media progress, spectral classification and smooth decays do NOT
 prove phone-speaker sound quality. **Martin's phone listen after the verifier
 and main's deployment remains the final acceptance.**

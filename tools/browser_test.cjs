@@ -15,12 +15,14 @@ const OUT=process.env.BBC_EVIDENCE_DIR || process.env.TMPDIR;
 const mime={'.js':'text/javascript','.css':'text/css','.html':'text/html','.json':'application/json','.jpg':'image/jpeg','.png':'image/png','.m4a':'audio/mp4','.ogg':'audio/ogg','.md':'text/plain'};
 const serverRequests=[];
 let revision=null;
+let swMutate=false; // update-banner scenario: serve sw.js with a bumped CACHE name
 const server=http.createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://localhost');const name=decodeURIComponent(url.pathname)==='/'?'index.html':decodeURIComponent(url.pathname).slice(1);
   if(name.startsWith('.') || name.split('/').includes('..')){res.writeHead(404).end();return;}
   serverRequests.push(name);
-  const data=revision ? execFileSync('git',['show',revision+':'+name],{cwd:ROOT,maxBuffer:10000000,stdio:['ignore','pipe','pipe']}) : await fs.readFile(path.join(ROOT,name));
+  let data=revision ? execFileSync('git',['show',revision+':'+name],{cwd:ROOT,maxBuffer:10000000,stdio:['ignore','pipe','pipe']}) : await fs.readFile(path.join(ROOT,name));
+  if(name==='sw.js'&&swMutate)data=Buffer.from(data.toString('utf8').replace('bigben-chimes-v1.3.1','bigben-chimes-v1.3.1-update-test'),'utf8');
   res.writeHead(200,{'Content-Type':mime[path.extname(name)]||'application/octet-stream','Content-Length':data.length,'Cache-Control':'no-store'});res.end(data);
  }catch(e){res.writeHead(404).end();}
 });
@@ -100,6 +102,9 @@ async function geometry(page,context){
   check(photo.verticalFraction>.98,label+' whole tower vertical frame',photo);
   const credit=await page.locator('.credit').evaluate(e=>({text:e.textContent,clipped:e.scrollWidth>e.clientWidth||e.scrollHeight>e.clientHeight,rect:e.getBoundingClientRect().toJSON()}));
   check(!credit.clipped&&credit.text.includes('creativecommons.org/licenses/by/2.5/'),label+' complete license attribution',credit);
+  const badgeText=await page.locator('#version').textContent();
+  check(/^v\d+\.\d+\.\d+$/.test(badgeText),label+' version badge shows the release',badgeText);
+  check(await page.locator('#update-banner').isHidden(),label+' update banner stays hidden while idle');
   if(width===390||width>height)await page.screenshot({path:path.join(OUT,'layout-'+label+'.png')});
   await operateSurface(page,context,label);
   await pickerGeometry(page,label,width,height);
@@ -213,23 +218,23 @@ async function autoAndPersistence(page){
  await resetLog(page);await page.locator('#btn-quarter').tap();
 }
 async function offlineUpgrade(browser,base){
- revision='d048668';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ revision='51da3b8';const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
  const page=await context.newPage();await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
- check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.2.2')),'real previous release cache installed');
+ check(await page.evaluate(async()=>(await caches.keys()).includes('bigben-chimes-v1.3.0')),'real previous release cache installed');
  await page.evaluate(async()=>{await caches.open('unrelated-app-v1');window.__controllerChanged=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{window.__controllerChanged=true;});});revision=null;
  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
  await page.waitForFunction(()=>window.__controllerChanged&&navigator.serviceWorker.controller.state==='activated');
  check(await page.evaluate(async()=>(await caches.keys()).includes('unrelated-app-v1')),'real upgrade preserves unrelated caches');
- const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.0'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
+ const state=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.1'),r=await c.match(new URL('./',location.href));return {keys:await caches.keys(),count:(await c.keys()).length,newUI:r&&(await r.text()).includes('btn-picker')};});
  console.log('activated upgrade',state);
  check(state.newUI,'upgraded release actually contains the new page',state);
- check(!state.keys.includes('bigben-chimes-v1.2.2'),'activated upgrade removes the previous release cache');
+ check(!state.keys.includes('bigben-chimes-v1.3.0'),'activated upgrade removes the previous release cache');
  const updated=['audio/q15.m4a','audio/q15.ogg','audio/q45.m4a','audio/q45.ogg'];
- const cachedHashes=await page.evaluate(async names=>{const c=await caches.open('bigben-chimes-v1.3.0'),out={};for(const name of names){const r=await c.match(new URL(name,location.href));out[name]=r?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;}return out;},updated);
+ const cachedHashes=await page.evaluate(async names=>{const c=await caches.open('bigben-chimes-v1.3.1'),out={};for(const name of names){const r=await c.match(new URL(name,location.href));out[name]=r?Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))).map(b=>b.toString(16).padStart(2,'0')).join(''):null;}return out;},updated);
  for(const name of updated){const expected=createHash('sha256').update(await fs.readFile(path.join(ROOT,name))).digest('hex');check(cachedHashes[name]===expected,'activated cache contains exact new '+name,{expected,actual:cachedHashes[name]});}
  await page.reload();await page.waitForSelector('#btn-picker');
  const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');const assets=[...sw.match(/const ASSETS = (\[[\s\S]*?\]);/)[1].matchAll(/'([^']+)'/g)].map(m=>m[1]);
- const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.3.0');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
+ const missing=await page.evaluate(async assets=>{const c=await caches.open('bigben-chimes-v1.3.1');const misses=[];for(const a of assets)if(!await c.match(new URL(a,location.href)))misses.push(a);return misses;},assets);
  check(!missing.length&&state.count===assets.length,'all release assets cached after upgrade',{count:assets.length,missing});
  const before=serverRequests.length;await page.reload();await page.waitForTimeout(150);
  check(serverRequests.slice(before).filter(p=>p!=='sw.js').length===0,'cached reload makes no asset refetches',serverRequests.slice(before));
@@ -238,9 +243,43 @@ async function offlineUpgrade(browser,base){
  check(await page.evaluate(()=>__BBC__.players.q15.currentTime>.1),'upgraded app and real audio work offline');
  check(JSON.stringify(await files(page))===JSON.stringify(['q15']),'offline :15 uses the new contiguous asset');
  await offlineAssets(page,'AAC');
- const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.0'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
+ const range=await page.evaluate(async()=>{const c=await caches.open('bigben-chimes-v1.3.1'),url=new URL('audio/q15.m4a',location.href),old=await c.match(url),body=await old.arrayBuffer(),headers=new Headers(old.headers);headers.delete('Content-Length');await c.put(url,new Response(body,{headers}));const r=await fetch(url,{headers:{Range:'bytes=0-15'}});return {status:r.status,bytes:(await r.arrayBuffer()).byteLength,range:r.headers.get('Content-Range')};});
  check(range.status===206&&range.bytes===16,'real offline Range works without Content-Length',range);
  await context.close();
+}
+async function updateBanner(browser,base){
+ // A release running THIS code must announce the NEXT one. Simulate it for
+ // real: load the candidate, then serve sw.js with a mutated CACHE name and
+ // call update() — a genuine install/activate/claim on a controlled page.
+ const sw=await fs.readFile(path.join(ROOT,'sw.js'),'utf8');
+ const cacheName=sw.match(/const CACHE = '([^']+)'/)[1];
+ const version=cacheName.replace('bigben-chimes-v','');
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
+ const page=await context.newPage();page.on('pageerror',e=>errors.push({name:'update-banner error',detail:String(e)}));
+ await page.goto(base);await page.evaluate(()=>navigator.serviceWorker.ready);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
+ check(await page.locator('#version').textContent()==='v'+version,'version badge shows the exact release',{badge:await page.locator('#version').textContent(),cacheName});
+ check(await page.locator('#update-banner').isHidden(),'a fresh load shows no update banner');
+ await shift(page,13,7);await resetLog(page);
+ await page.locator('#btn-q4').tap();await waitPlays(page,1); // 20.8 s melody guarantees the update lands DURING real playback
+ swMutate=true;
+ await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update();});
+ await page.waitForFunction(()=>__BBC__.update.state().ready,null,{timeout:30000});
+ const during=await page.evaluate(()=>({visible:!document.getElementById('update-banner').hidden,
+  playing:__audioLog.some(e=>e.status==='playing'),ready:__BBC__.update.state().ready}));
+ check(during.ready&&during.playing&&!during.visible,'update detected but the banner does NOT appear during active playback',during);
+ await page.locator('#btn-stop').tap();
+ await page.waitForFunction(()=>!document.getElementById('update-banner').hidden,null,{timeout:5000});
+ check((await page.locator('#update-banner').textContent()).includes('NOVÁ VERZIA'),'idle after playback reveals the Slovak update banner');
+ const box=await page.locator('#update-banner').boundingBox();
+ const hit=await page.evaluate(([x,y])=>document.elementFromPoint(x,y).id,[box.x+box.width/2,box.y+box.height/2]);
+ check(hit==='update-banner'&&box.height>=56,'banner is a huge reachable tap target',{hit,height:box.height});
+ await page.evaluate(()=>{window.__preReloadMarker=true;});
+ await page.locator('#update-banner').tap();
+ await page.waitForFunction(()=>window.__preReloadMarker===undefined,null,{timeout:15000});
+ await page.waitForFunction(()=>!!window.__BBC__&&!!navigator.serviceWorker.controller,null,{timeout:15000});
+ check(await page.evaluate(async v=>__BBC__.VERSION===v&&document.getElementById('version').textContent==='v'+v,version),'tapping the banner reloads onto the new release with the badge intact');
+ check(await page.evaluate(async n=>(await caches.keys()).includes(n),cacheName+'-update-test'),'the reload really runs on the freshly installed update worker',await page.evaluate(async()=>caches.keys()));
+ swMutate=false;await context.close();
 }
 async function firstAutoGesture(browser,base){
  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});await context.addInitScript(INIT);
@@ -345,6 +384,7 @@ async function main(){
   await context.close();
   if(!process.argv.includes('--modal-only')){
    await offlineUpgrade(browser,base);
+   await updateBanner(browser,base);
    await firstAutoGesture(browser,base);
    await coldFirstGestures(browser,base);
    await fallbackAndFile(browser,base);

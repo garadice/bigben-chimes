@@ -9,7 +9,7 @@ const path=require('node:path');
 function harness(headers={}) {
  const handlers={};const stores=new Map();const requests=[];
  const origin='https://example.test';
- const key='bigben-chimes-v1.3.0';
+ const key='bigben-chimes-v1.3.1';
  const cache={
   match:async req=>new Response('0123456789',{headers}),
   put:async()=>{},addAll:async()=>{}

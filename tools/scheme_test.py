@@ -23,7 +23,11 @@ EXPECTED = {
     'melody': ['E', 'G#', 'F#', 'B', 'E', 'F#', 'G#', 'E',
                'G#', 'E', 'F#', 'B', 'B', 'F#', 'G#', 'E'],
 }
-# v1.2.1 baseline, intentionally frozen by this release's scope.
+# Byte-frozen approved content. bong/q30/melody audio, chime.js and
+# manifest.json are still the v1.2.1-era bytes; app.js/styles.css/index.html
+# were re-pinned by the v1.3.1 update-prompt release. Re-pin a hash ONLY in
+# the release that legitimately changes that file — everything NOT listed
+# as re-pinned must stay byte-identical across releases.
 FROZEN = {
     'audio/bong.ogg': '8819a3f10236fd85683447031a4d72e5da3d8dedcd4e179036f34aea487c5467',
     'audio/bong.m4a': '84f40eac409ad5b50f4fb2fc44367136dfed624f8e0f47e80154a5e2742482b5',
@@ -31,10 +35,10 @@ FROZEN = {
     'audio/q30.m4a': '09886ffe13f503697f8462bd79946c1772f313726325b0dc05a6dd2a45ed8135',
     'audio/melody.ogg': '2af904fc365232aec7047b486df020bb03c3029ceb4358e854d1bec931192f6d',
     'audio/melody.m4a': '00d8dfc6862f66097493e93325a24ec11c851c6e2c18b1c273585b4dfcbec297',
-    'app.js': 'aaa76bd1e0ce2094624923b435f0e8267a667925981f7d7fc3ba5aa463bb01d7',
+    'app.js': '21076a8b3c157fa896c7e7c44490843ff7881a63d6f11e843848d79e30525d6f',
     'chime.js': '832338b59f1f96aff9e30c3a7e9b7cb79a25d06e776fc0a8f26585c353a4a01a',
-    'styles.css': 'db9da36a41b60853afa184217921806834e5e931738da4c2762f696e48e32d52',
-    'index.html': '6e1f72849919e3274f4195d4bace60492013d85a8dc93edd61494463ca5a6b31',
+    'styles.css': '9326593bb8aabcf57b7ccdaadaba4e02ea133b7fa3d24f2e2defdb8e6c42baf4',
+    'index.html': '9c17891b4c662ac53fbf67df9f6eee9e7df2387283d6e89a4f3fa1ae52947292',
     'manifest.json': 'c47bd1946a5ca15f436b7d3c9ae9ae762cb5a179700c1ef2db36c639e52e877f',
 }
 

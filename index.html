@@ -74,9 +74,14 @@
     <input id="volume" type="range" min="0" max="1" step="0.01" value="0.9" aria-label="Hlasitosť">
   </div>
 
+  <!-- update prompt: revealed by app.js only once a new release is already
+       installed AND nothing is ringing; tap = reload -->
+  <button id="update-banner" class="update" hidden>🔔 NOVÁ VERZIA — klepni</button>
+
   <p class="credit">📷 Diliff · zmenšené · CC BY 2.5<br>
     https://creativecommons.org/licenses/by/2.5/<br>
-    🔔 Radio Oranje · 1. 1. 1945 · PD</p>
+    🔔 Radio Oranje · 1. 1. 1945 · PD<br>
+    <span id="version"></span></p>
 
   <script src="chime.js"></script>
   <script src="app.js"></script>

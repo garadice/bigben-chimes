@@ -258,6 +258,36 @@ body::before {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
 
+/* ---------- version badge (v1.3.1): last line of the credit block,
+ * bottom-left, tiny, always visible, out of the thumb path ---------- */
+#version { opacity: 0.85; letter-spacing: 0.03em; }
+
+/* ---------- update banner: huge kid-safe tap target, centre screen.
+ * Only ever revealed while nothing is ringing (see app.js updateTick),
+ * so it cannot collide with the bong counter or any control ---------- */
+.update {
+  position: fixed;
+  z-index: 9;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px 30px;
+  border-radius: 26px;
+  border: 3.5px solid var(--gilt);
+  background: rgba(9, 13, 32, 0.88);
+  color: var(--dial);
+  font-family: Georgia, "Times New Roman", "Noto Serif", serif;
+  font-weight: 700;
+  font-size: clamp(26px, 8vw, 48px);
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), inset 0 0 0 1.5px var(--ink);
+  transition: transform 0.08s ease;
+}
+.update:active { transform: translate(-50%, -50%) scale(0.94); }
+.update[hidden] { display: none; }
+
 /* ---------- credit (CC BY 2.5 attribution — must stay) ---------- */
 .credit {
   position: fixed;
@@ -393,6 +423,6 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   #btn-stop.pressed { animation: none; }
   .tower.sway { animation: none; transform: none; }
-  .count, .armed { transition: none; }
+  .count, .armed, .update { transition: none; }
   .pnum, .pplay, .sq, .sq:active { transition: none; }
 }

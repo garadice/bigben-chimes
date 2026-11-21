@@ -454,23 +454,97 @@
     document.addEventListener(evtName, function () { unlock(); }, { passive: true });
   });
 
-  // 1 s tick: clock display + quarter scheduler (fires at :00/:15/:30/:45).
+  // 1 s tick: clock display, quarter scheduler (fires at :00/:15/:30/:45)
+  // and the update banner's show/idle-reload heartbeat.
   setInterval(function () {
     renderClock();
     scheduler.tick();
+    updateTick();
   }, 1000);
 
-  // ---------- service worker ----------
+  // ---------- version badge + update detection (v1.3.1) ----------
+  // VERSION is the single source of truth for the release identity; sw.js
+  // CACHE ('bigben-chimes-vX.Y.Z') is bumped by hand in the SAME change and
+  // app_test.js asserts the pairing. A visible version answers "which build
+  // am I hearing?" — the v1.3.0 stale-cache incident had no way to tell.
+  var VERSION = '1.3.1';
+  var $version = document.getElementById('version');
+  var $update = document.getElementById('update-banner');
+  var updateReady = false; // a newer release is installed, waiting to load
+  var idleSince = 0;       // last moment playback was active
+  var IDLE_RELOAD_MS = 60000;
+
+  function anythingPlaying() {
+    var all = [players.melody, players.q30, players.q15, players.q45]
+      .concat(players.bongs);
+    for (var i = 0; i < all.length; i++) {
+      if (!all[i].paused && !all[i].ended) return true;
+    }
+    return false;
+  }
+
+  /** A newer service worker is installed: route into the banner flow. */
+  function markUpdateReady() {
+    if (updateReady) return;
+    updateReady = true;
+    idleSince = Date.now();
+    updateTick();
+  }
+
+  /**
+   * 1 s heartbeat for the update flow. A chime or bong is NEVER interrupted:
+   * while anything plays the banner stays hidden and the idle clock resets,
+   * so a long tune cannot end in a surprise reload. Once idle, the banner
+   * appears (tap = reload); only after ~60 s of continued quiet does the
+   * page reload itself — otherwise it simply waits for the tap.
+   */
+  function updateTick() {
+    if (!updateReady) return;
+    if (anythingPlaying()) { idleSince = Date.now(); return; }
+    if ($update.hidden) {
+      $update.hidden = false; // reveal only on a quiet screen
+      idleSince = Date.now();
+      return;
+    }
+    if (Date.now() - idleSince >= IDLE_RELOAD_MS) location.reload();
+  }
+
+  if ($version) $version.textContent = 'v' + VERSION;
+  if ($update) $update.addEventListener('click', function () { location.reload(); });
+
   if ('serviceWorker' in navigator &&
       (location.protocol === 'https:' || location.hostname === 'localhost' ||
        location.hostname === '127.0.0.1')) {
-    navigator.serviceWorker.register('sw.js').catch(function (err) {
+    // An upgrade announces itself two ways; both route into the same
+    // idempotent banner. The controller guard is the reload-loop brake:
+    // the FIRST install's claim (no controller existed before) is a page
+    // gaining a worker, not an update, and must not look like one.
+    var registered = navigator.serviceWorker.register('sw.js');
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('controllerchange', markUpdateReady);
+    }
+    registered.then(function (reg) {
+      // Blocked/unavailable workers resolve with undefined (observed in
+      // Chromium's blocked mode) — a page without a registration simply
+      // never announces updates, which is the safe default.
+      if (!reg || !reg.addEventListener) return;
+      reg.addEventListener('updatefound', function () {
+        var installing = reg.installing;
+        if (!installing) return;
+        installing.addEventListener('statechange', function () {
+          if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+            markUpdateReady();
+          }
+        });
+      });
+    }).catch(function (err) {
       console.warn('SW registration failed:', err);
     });
   }
 
   // ---------- test hooks ----------
   window.__BBC__ = {
+    VERSION: VERSION,
     playEvents: playEvents,
     cancelAll: cancelAll,
     players: players,
@@ -492,6 +566,17 @@
     pickerState: function () { return { open: pickerOpen, hour: pickerHour }; },
     openPicker: openPicker,
     closePicker: closePicker,
+    update: {
+      state: function () {
+        return {
+          ready: updateReady,
+          visible: !$update.hidden,
+          idleMs: updateReady ? Date.now() - idleSince : 0
+        };
+      },
+      markReady: markUpdateReady, // tests only: simulate an installed upgrade
+      tick: updateTick
+    },
     stats: function () {
       return {
         timers: seqTimers.length,

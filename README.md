@@ -29,6 +29,11 @@ and a huge number flashes on screen so a kid can count the bongs.
 A small clock shows the time top-left (tap it to open the hour picker);
 volume lives bottom-left; the whole photo stays visible.
 
+A tiny badge (bottom-left) shows the exact release (e.g. v1.3.1), and when a
+new version has been installed in the background a big 🔔 NOVÁ VERZIA banner
+appears once nothing is ringing — tap it to load the update (or leave the app
+quiet for a minute); ringing is never interrupted.
+
 ## Install on Android (Chrome)
 
 1. Open the site URL in Chrome.
